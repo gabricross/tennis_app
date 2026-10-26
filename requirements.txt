@@ -1,0 +1,8 @@
+fastapi>=0.120,<1
+uvicorn>=0.38,<1
+numpy>=2.2,<3
+opencv-python-headless>=4.11,<5
+onnxruntime>=1.23,<2
+scipy>=1.15,<2
+Pillow>=11,<13
+imageio-ffmpeg>=0.6,<0.7

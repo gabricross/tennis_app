@@ -1,0 +1,302 @@
+from __future__ import annotations
+
+import bisect
+import csv
+import json
+import logging
+import subprocess
+import threading
+import time
+from collections import deque
+from pathlib import Path
+from typing import Callable
+
+import cv2
+import imageio_ffmpeg
+import numpy as np
+
+from config import FPS
+from court import COURT_LINES, LENGTH, WIDTH, CourtCamera, court_matrix, project
+from inference import Detection, ModelBank, PlayerSelector
+from media import check_cancel, normalize
+
+LOGGER = logging.getLogger("tennis.engine")
+COLORS = {"north": (210, 224, 92), "south": (111, 161, 255)}
+
+
+def encode_result(
+    source: Path, destination: Path, samples: list[dict], frames: int,
+    event: threading.Event, progress: Callable[[float, str], None], credit: str,
+) -> None:
+    capture = cv2.VideoCapture(str(source))
+    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    error_path = destination.parent / "render.log"
+    command = [
+        imageio_ffmpeg.get_ffmpeg_exe(), "-nostdin", "-hide_banner", "-loglevel", "error",
+        "-y", "-f", "rawvideo", "-pixel_format", "bgr24", "-video_size", f"{width}x{height}",
+        "-framerate", str(FPS), "-i", "pipe:0", "-an", "-c:v", "libx264",
+        "-threads", "2", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart", str(destination),
+    ]
+    times = [sample["time"] for sample in samples]
+    with error_path.open("wb") as error_stream:
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=error_stream)
+        try:
+            if process.stdin is None:
+                raise RuntimeError("No se ha podido iniciar la exportación de vídeo.")
+            for index in range(frames):
+                check_cancel(event)
+                success, frame = capture.read()
+                if not success:
+                    raise RuntimeError("El vídeo terminó antes de completar la exportación.")
+                timestamp = index / FPS
+                sample_index = max(0, bisect.bisect_right(times, timestamp) - 1)
+                sample = samples[sample_index]
+                following = samples[min(sample_index + 1, len(samples) - 1)]
+                span = following["time"] - sample["time"]
+                alpha = (timestamp - sample["time"]) / span if span else 0
+                draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp)
+                if credit:
+                    cv2.rectangle(frame, (0, height - 23), (width, height), (16, 29, 32), -1)
+                    cv2.putText(frame, credit[:165], (9, height - 7),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (190, 208, 210), 1, cv2.LINE_AA)
+                process.stdin.write(frame.tobytes())
+                if index == min(frames - 1, FPS):
+                    cv2.imwrite(str(destination.parent / "poster.jpg"), frame)
+                if index % 15 == 0:
+                    progress(82 + 16 * index / frames, "Exportando el vídeo anotado")
+            process.stdin.close()
+            code = process.wait(timeout=60)
+        except BrokenPipeError as error:
+            raise RuntimeError("FFmpeg ha interrumpido la exportación. Consulta render.log.") from error
+        finally:
+            capture.release()
+            if process.stdin and not process.stdin.closed:
+                process.stdin.close()
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+    if code:
+        raise RuntimeError("No se ha podido completar el MP4: " + error_path.read_text(errors="replace")[-500:])
+
+
+def draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp) -> None:
+    height, width = frame.shape[:2]
+    layer = frame.copy()
+    valid = sample["camera_valid"] and following["camera_valid"]
+    if valid:
+        matrix = (1 - alpha) * np.array(sample["matrix"]) + alpha * np.array(following["matrix"])
+        for line in COURT_LINES:
+            points = np.rint(project(line, matrix)).astype(int)
+            cv2.line(layer, tuple(points[0]), tuple(points[1]), (110, 230, 198), 1, cv2.LINE_AA)
+        cv2.addWeighted(layer, 0.45, frame, 0.55, 0, frame)
+    next_players = {player["side"]: player for player in following["players"]}
+    players = []
+    for source_player in sample["players"]:
+        player = dict(source_player)
+        if player["side"] in next_players:
+            for key in ("box", "pitch"):
+                player[key] = (
+                    (1 - alpha) * np.array(player[key])
+                    + alpha * np.array(next_players[player["side"]][key])
+                ).tolist()
+        players.append(player)
+        x1, y1, x2, y2 = map(round, player["box"])
+        color = COLORS[player["side"]]
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+        label = "ARRIBA" if player["side"] == "north" else "ABAJO"
+        cv2.putText(frame, label, (x1, max(20, y1 - 9)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.47, color, 2, cv2.LINE_AA)
+        cv2.ellipse(frame, ((x1 + x2) // 2, y2), (11, 4), 0, 0, 360, color, 2)
+    if sample["ball"] is not None:
+        history = [
+            (entry["time"], entry["ball"]) for entry in samples[max(0, sample_index - 6) : sample_index + 1]
+            if entry["ball"] is not None
+        ]
+        for left, right in zip(history, history[1:]):
+            if right[0] - left[0] <= 0.15 and np.hypot(right[1]["x"] - left[1]["x"], right[1]["y"] - left[1]["y"]) < width * 0.35:
+                cv2.line(frame, (round(left[1]["x"]), round(left[1]["y"])),
+                         (round(right[1]["x"]), round(right[1]["y"])), (55, 240, 245), 2, cv2.LINE_AA)
+        point = sample["ball"]
+        cv2.circle(frame, (round(point["x"]), round(point["y"])), 5, (55, 240, 245), 2)
+    map_width = max(92, round(width * 0.105))
+    map_height = round(map_width * LENGTH / WIDTH)
+    x, y = width - map_width - 22, 57
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x - 10, y - 30), (x + map_width + 10, y + map_height + 31), (23, 43, 43), -1)
+    cv2.addWeighted(overlay, 0.8, frame, 0.2, 0, frame)
+    ink = (125, 161, 150)
+    cv2.rectangle(frame, (x, y), (x + map_width, y + map_height), ink, 1)
+    cv2.line(frame, (x, y + map_height // 2), (x + map_width, y + map_height // 2), ink, 1)
+    for offset in (1.37, 9.60):
+        xx = x + round(offset / WIDTH * map_width)
+        cv2.line(frame, (xx, y), (xx, y + map_height), ink, 1)
+    for offset in (6.4, 17.37):
+        yy = y + round(offset / LENGTH * map_height)
+        cv2.line(frame, (x + round(1.37 / WIDTH * map_width), yy),
+                 (x + round(9.60 / WIDTH * map_width), yy), ink, 1)
+    if valid:
+        for player in players:
+            px, py = player["pitch"]
+            if 0 <= px <= WIDTH and 0 <= py <= LENGTH:
+                cv2.circle(frame, (x + round(px / WIDTH * map_width), y + round(py / LENGTH * map_height)),
+                           4, COLORS[player["side"]], -1, cv2.LINE_AA)
+    cv2.putText(frame, "PISTA" if valid else "SIN REGISTRO", (x - 1, y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (215, 235, 230), 1, cv2.LINE_AA)
+    cv2.rectangle(frame, (0, 0), (width, 34), (16, 29, 32), -1)
+    state = "REGISTRO ACTIVO" if valid else "CAMARA NO VALIDA - MAPA OCULTO"
+    label = f"TENNIS LAB  |  {timestamp:05.1f}s  |  {state}  |  ANALISIS LOCAL"
+    cv2.putText(frame, label, (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (215, 235, 230), 1, cv2.LINE_AA)
+
+
+def summarize(samples: list[dict], mode: str, duration: float, elapsed: float) -> dict:
+    total = len(samples)
+    camera_coverage = sum(s["camera_valid"] for s in samples) / total
+    players = {}
+    warnings = []
+    for side in ("north", "south"):
+        observations = [p for s in samples for p in s["players"] if p["side"] == side]
+        coverage = len(observations) / total
+        zones = {"baseline": 0, "middle": 0, "net": 0}
+        for observation in observations:
+            y = observation["pitch"][1]
+            distance_to_net = abs(y - LENGTH / 2)
+            zone = "net" if distance_to_net < 4 else "middle" if distance_to_net < 8 else "baseline"
+            zones[zone] += 1
+        players[side] = {
+            "observations": len(observations), "coverage": coverage,
+            "mean_detector_score": float(np.mean([p["confidence"] for p in observations])) if observations else None,
+            "zones": {name: count / len(observations) if observations else 0 for name, count in zones.items()},
+        }
+        if coverage < 0.75:
+            warnings.append(f"Seguimiento incompleto del jugador {'de arriba' if side == 'north' else 'de abajo'} ({coverage:.0%} de muestras).")
+    if camera_coverage < 0.9:
+        warnings.append("Se ha perdido la calibración durante parte del clip. No se proyectan esas posiciones.")
+    ball_observations = sum(sample["ball"] is not None for sample in samples)
+    if mode == "complete" and ball_observations / total < 0.5:
+        warnings.append("Pelota experimental: detecciones escasas o intermitentes. No interpretes la estela como una trayectoria completa.")
+    if mode == "complete":
+        warnings.append("La pelota se representa en píxeles de imagen, no en 3D ni como bote sobre la pista.")
+    if not any(p["observations"] for p in players.values()):
+        raise ValueError("No se han observado jugadores con esta calibración. Revisa las esquinas o elige una toma de individuales con la pista completa.")
+    return {
+        "duration": duration, "samples": total, "camera_coverage": camera_coverage,
+        "players": players, "ball_observations": ball_observations,
+        "ball_coverage": ball_observations / total if mode == "complete" else None,
+        "processing_seconds": elapsed, "mode": mode, "warnings": warnings,
+        "metrics_note": "Cobertura = muestras observadas / muestras analizadas. No mide precisión. "
+        "Las zonas se calculan solo entre observaciones válidas. Sin velocidades, distancia física, marcador, botes ni decisiones arbitrales.",
+    }
+
+
+def analyze_clip(
+    source: Path, directory: Path, settings: dict, event: threading.Event,
+    progress: Callable[[float, str], None], models: ModelBank, source_credit: dict | None = None,
+    source_notice: str | None = None,
+) -> dict:
+    started = time.perf_counter()
+    directory.mkdir(parents=True, exist_ok=True)
+    original = directory / "original.mp4"
+    normalize(source, original, settings["start"], settings["duration"], event, progress)
+    capture = cv2.VideoCapture(str(original))
+    total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+    success, frame = capture.read()
+    if not success or total < FPS // 2:
+        raise RuntimeError("No se ha podido preparar un fragmento de vídeo válido.")
+    height, width = frame.shape[:2]
+    matrix = court_matrix(settings["corners"], (width, height))
+    camera = CourtCamera(frame, matrix)
+    selector = PlayerSelector()
+    people = models.person_detector()
+    ball = models.ball_detector() if settings["mode"] == "complete" else None
+    frames = deque(maxlen=3)
+    stride = 3 if ball else 6
+    samples = []
+    for index in range(total):
+        check_cancel(event)
+        if index:
+            success, frame = capture.read()
+            if not success:
+                raise RuntimeError("El vídeo normalizado se interrumpió durante el análisis.")
+        frames.append(frame.copy())
+        if index % stride and index != total - 1:
+            continue
+        timestamp = index / FPS
+        detections = people.detect(frame)
+        if index == 0:
+            valid, reason, support = True, "Calibración confirmada por el usuario", camera.initial_support
+        else:
+            state = camera.update(frame, [d.box for d in detections])
+            matrix, valid, reason, support = state.matrix, state.valid, state.reason, state.support
+        provisional = selector.select(detections, matrix, timestamp, commit=False) if valid else []
+        if valid and not any(player["side"] == "north" for player in provisional):
+            prior = selector.last_boxes.get("north")
+            if prior is not None and timestamp - prior[0] <= 0.6:
+                x1, y1, x2, y2 = prior[1]
+                center = (x1 + x2) / 2
+                radius = max(160, (x2 - x1) * 4)
+                left, right = max(0, round(center - radius)), min(width, round(center + radius))
+                top, bottom = max(0, round(y1 - 80)), min(height, round(y2 + 100))
+                extra = people.detect(frame[top:bottom, left:right])
+                detections.extend([
+                    Detection((d.box[0] + left, d.box[1] + top, d.box[2] + left, d.box[3] + top), d.confidence)
+                    for d in extra
+                ])
+                provisional = selector.select(detections, matrix, timestamp, commit=False)
+        if valid and not any(player["side"] == "north" for player in provisional):
+            roi = project([[-2, -5], [WIDTH + 2, -5], [WIDTH + 2, LENGTH / 2], [-2, LENGTH / 2]], matrix)
+            x1, y1 = np.maximum(0, np.floor(roi.min(axis=0))).astype(int)
+            x2, y2 = np.minimum([width, height], np.ceil(roi.max(axis=0))).astype(int)
+            if x2 - x1 > 50 and y2 - y1 > 40:
+                extra = people.detect(frame[y1:y2, x1:x2])
+                detections.extend([
+                    Detection((d.box[0] + x1, d.box[1] + y1, d.box[2] + x1, d.box[3] + y1), d.confidence)
+                    for d in extra
+                ])
+        selected = selector.select(detections, matrix, timestamp) if valid else []
+        point = ball.detect(frames, timestamp) if ball else None
+        samples.append({
+            "time": round(timestamp, 6), "frame": index, "camera_valid": valid,
+            "camera_reason": reason, "line_support": support,
+            "matrix": matrix.tolist() if valid else None, "players": selected, "ball": point,
+        })
+        progress(12 + 67 * (index + 1) / total,
+                 "Analizando jugadores y pelota" if ball else "Analizando jugadores y cámara")
+    capture.release()
+    check_cancel(event)
+    summary = summarize(samples, settings["mode"], total / FPS, time.perf_counter() - started)
+    if source_notice:
+        summary["warnings"].insert(0, source_notice)
+    credit_text = ""
+    if source_credit:
+        credit_text = f"Source: {source_credit['author']} | Wikimedia Commons | {source_credit['license']} | cropped, normalized, analysis overlays"
+    encode_result(original, directory / "analysis.mp4", samples, total, event, progress, credit_text)
+    summary["total_seconds_including_render"] = time.perf_counter() - started
+    result = {
+        "version": 1, "width": width, "height": height, "fps": FPS, "frames": total,
+        "config": settings, "summary": summary, "source_credit": source_credit,
+        "source_notice": source_notice, "samples": samples,
+    }
+    (directory / "analysis.json").write_text(
+        json.dumps(result, ensure_ascii=False, allow_nan=False), encoding="utf-8"
+    )
+    with (directory / "observations.csv").open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["seconds", "player_side", "x_reference", "y_reference", "detector_score", "observed", "camera_valid"])
+        for sample in samples:
+            for player in sample["players"]:
+                writer.writerow([sample["time"], player["side"], *player["pitch"], player["confidence"], True, sample["camera_valid"]])
+    if ball:
+        with (directory / "ball.csv").open("w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["seconds", "x_image_pixels", "y_image_pixels", "intensity_class", "observed"])
+            for sample in samples:
+                point = sample["ball"]
+                if point is not None:
+                    writer.writerow([sample["time"], point["x"], point["y"], point["intensity"], True])
+    return summary

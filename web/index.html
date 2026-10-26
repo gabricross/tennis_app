@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101e21">
+  <title>Tennis Lab — Tu estudio de análisis</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23101e21'/%3E%3Ccircle cx='16' cy='16' r='10' fill='%23d9fa73'/%3E%3Cpath d='M9 8q12 8 0 17M24 8q-12 8 0 17' stroke='%23101e21' fill='none'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css"><script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Saltar al contenido</a>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="Tennis Lab, inicio"><span class="brand-ball">◒</span><span>TENNIS<span class="brand-light"> / LAB</span></span></a>
+    <p class="sidebar-label">TU ESTUDIO PRIVADO</p>
+    <nav aria-label="Navegación principal">
+      <button data-screen="studio" aria-current="page"><span aria-hidden="true">＋</span> Analizar un clip</button>
+      <button data-screen="library"><span aria-hidden="true">▤</span> Biblioteca <span id="library-count" class="count">0</span></button>
+      <button data-screen="about"><span aria-hidden="true">◎</span> Motor y privacidad</button>
+    </nav>
+    <div class="sidebar-note"><span class="status-dot"></span><strong>LOCAL, DE VERDAD</strong><p>Sin suscripciones.<br>Sin subir tu vídeo a una nube.</p></div>
+    <div class="sidebar-footer"><span id="engine-status">Conectando con el motor…</span><small>Gabriele Ruggeri · Tennis Lab</small></div>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar"><div><span class="breadcrumb">TENNIS LAB</span><span class="slash">/</span><span id="screen-title">Estudio de análisis</span></div><span class="cpu-badge"><span class="status-dot"></span> CPU LOCAL</span></header>
+    <main id="main">
+      <div id="global-message" class="notice error" role="alert" hidden></div>
+      <section id="screen-studio" class="screen">
+        <div class="studio-heading"><div><p class="eyebrow">VISIÓN POR COMPUTADOR, EN TU PISTA</p><h1>Tu tenis.<br><span>Con perspectiva.</span></h1><p class="lead">Pasa de mirar un clip a explorar el movimiento.<br> Con tus vídeos, en tu ordenador y a tu ritmo.</p></div>
+          <div class="hero-court" aria-hidden="true"><div class="court-illustration"><span class="court-mid"></span><span class="court-service"></span><i class="court-dot north"></i><i class="court-dot south"></i></div><span>DETECTAR · SEGUIR · EXPLORAR</span></div></div>
+        <ol class="workflow" aria-label="Etapas del análisis"><li data-step="1" class="active"><span>01</span> Tu vídeo</li><li data-step="2"><span>02</span> La pista</li><li data-step="3"><span>03</span> El análisis</li><li data-step="4"><span>04</span> Tus resultados</li></ol>
+
+        <section id="upload-stage" class="stage" aria-labelledby="upload-title">
+          <div class="upload-grid"><div class="panel dropzone" id="dropzone">
+            <span class="upload-icon" aria-hidden="true">↥</span><h2 id="upload-title">El siguiente clip es el tuyo.</h2><p>Arrastra un vídeo aquí o elígelo desde tu ordenador.</p>
+            <input id="file-input" type="file" accept=".mp4,.mov,.webm,.mkv,.avi" class="sr-only" aria-label="Seleccionar vídeo de tenis">
+            <button class="button primary" id="choose-file">Elegir vídeo <span aria-hidden="true">↗</span></button>
+            <small>MP4, MOV, WebM, MKV o AVI · Hasta 300 MB</small>
+            <div id="upload-progress" hidden><progress id="upload-bar" max="100" value="0"></progress><p id="upload-status" role="status">Preparando carga…</p><button id="cancel-upload" class="text-button">Cancelar carga</button></div>
+            <button id="use-previous" class="text-button previous-button" hidden>Probar con mi demo de tenis anterior</button>
+          </div><aside class="panel good-clip"><p class="eyebrow">UN BUEN CLIP CAMBIA TODO</p><h3>La pista completa.<br>Dos jugadores.<br>Una cámara estable.</h3><ul><li>Individuales, preferiblemente desde el fondo.</li><li>Sin cortes, repeticiones ni primeros planos.</li><li>Seleccionarás entre 1 y 120 segundos.</li><li>Revisarás las esquinas antes de analizar.</li></ul><p class="small-note">No es tiempo real. En CPU, un clip corto puede requerir varios minutos, especialmente con pelota.</p></aside></div>
+        </section>
+
+        <section id="configure-stage" class="stage" hidden aria-labelledby="configure-title">
+          <div class="section-head"><div><p class="eyebrow">PREPARA TU FRAGMENTO</p><h2 id="configure-title">Pon la pista en su sitio.</h2><p id="clip-description" class="muted"></p></div><button id="change-clip" class="button secondary">Elegir otro vídeo</button></div>
+          <div id="input-notice" class="notice warning" hidden></div>
+          <div class="range-panel panel"><div><label for="clip-start">Inicio, en segundos</label><input id="clip-start" type="number" min="0" step="0.1" value="0"></div><div><label for="clip-duration">Duración del análisis</label><input id="clip-duration" type="number" min="1" max="120" step="0.1" value="10"></div><button id="load-frame" class="button secondary">Actualizar fotograma</button><span id="range-description" class="small-note"></span></div>
+          <div class="calibration-grid"><div class="panel calibration-panel"><div class="panel-top"><strong>Calibración de pista</strong><span id="calibration-status" class="pill">Sin confirmar</span></div><div id="calibration-frame"><img id="calibration-image" alt="Fotograma del inicio seleccionado. Marca las cuatro esquinas exteriores de la pista."><canvas id="calibration-canvas" aria-label="Marcar esquinas de la pista con el ratón. También puedes usar los campos de coordenadas." role="img"></canvas></div><p id="corner-instruction" class="caption" role="status">Marca las cuatro esquinas de la pista de dobles, siguiendo el orden indicado.</p><div class="calibration-actions"><button id="auto-court" class="button secondary">Proponer pista con IA</button><button id="reset-corners" class="text-button">Volver a marcar</button></div></div>
+            <div class="panel calibration-guide"><p class="eyebrow">CUATRO PUNTOS. SIN ADIVINAR.</p><h3>Las líneas exteriores,<br>no las de individuales.</h3><ol id="corner-list"><li>Arriba izquierda</li><li>Arriba derecha</li><li>Abajo derecha</li><li>Abajo izquierda</li></ol><div id="corner-fields"></div><p class="small-note">Puedes arrastrar cada punto. La IA solo propone: una geometría convincente también puede estar equivocada.</p><label class="check-label"><input id="confirm-court" type="checkbox"> He revisado las cuatro esquinas y corresponden a esta toma.</label></div>
+          </div>
+          <div class="mode-grid" role="group" aria-label="Modo de análisis"><label class="mode-card"><input type="radio" name="analysis-mode" value="players" checked><div><span class="eyebrow">RECOMENDADO PARA EMPEZAR</span><h3>Jugadores y pista</h3><p>Seguimiento de ambas mitades, cámara, minimapa, zonas y exportación. Muestreo aproximado de 5 Hz.</p></div></label><label class="mode-card"><input type="radio" name="analysis-mode" value="complete" id="complete-mode"><div><span class="eyebrow">MÁS LENTO · EXPERIMENTAL</span><h3>Añadir pelota</h3><p>TrackNet usa tres fotogramas consecutivos. Observaciones de pelota en imagen; sin velocidad, botes ni decisiones de línea.</p></div></label></div>
+          <div class="start-analysis"><p id="analysis-readiness" class="small-note">Confirma la pista para continuar.</p><button id="start-analysis" class="button primary" disabled>Analizar mi fragmento <span aria-hidden="true">→</span></button></div>
+        </section>
+
+        <section id="progress-stage" class="stage panel progress-panel" hidden aria-labelledby="progress-title">
+          <p class="eyebrow">EL MOTOR ESTÁ TRABAJANDO</p><h2 id="progress-title">Cada fotograma cuenta.</h2><p id="job-message" role="status">En cola</p><div class="progress-number" id="job-percent">0<span>%</span></div><progress id="job-progress" max="100" value="0"></progress><div class="progress-meta"><span id="job-elapsed">0 s transcurridos</span><span>Un análisis a la vez · CPU</span></div><p class="small-note">La barra refleja preparación, fotogramas procesados y exportación. Puedes ir a la biblioteca; el servidor seguirá trabajando mientras permanezca abierto.</p><div class="progress-actions"><button id="cancel-job" class="button secondary">Cancelar análisis</button><button class="text-button" data-screen="library">Ver la biblioteca</button></div>
+        </section>
+
+        <section id="results-stage" class="stage" hidden aria-labelledby="results-title">
+          <div class="section-head"><div><p class="eyebrow">TU CLIP, CON OTRA CAPA</p><h2 id="results-title">Del vídeo a la observación.</h2><p id="result-subtitle" class="muted"></p></div><button id="new-analysis" class="button primary">＋ Nuevo análisis</button></div>
+          <div id="result-warnings" class="notice warning" hidden></div>
+          <div class="results-layout"><div><div class="panel video-panel"><div class="panel-top"><strong id="result-view-label">Vídeo analizado</strong><div class="segmented" role="group" aria-label="Vista del resultado"><button data-result-view="analysis" aria-pressed="true">Analizado</button><button data-result-view="original" aria-pressed="false">Original</button></div></div><video id="result-video" controls playsinline preload="metadata" aria-label="Vídeo del análisis de tenis"></video><div class="video-foot"><span id="result-time">00.0 s</span><span>Sin audio · Sin extrapolar jugadores ocultos</span></div></div>
+              <div class="panel timeline-panel"><div class="panel-top"><strong>Cuándo hay observaciones</strong><span class="small-note">Haz clic para saltar</span></div><canvas id="coverage-timeline" width="1200" height="114" role="img" aria-label="Disponibilidad temporal de observaciones de arriba, abajo y pelota"></canvas><label for="result-seek" class="sr-only">Instante del resultado</label><input id="result-seek" type="range" min="0" max="1" step="0.01"><p class="caption">Los huecos son falta de observaciones, no tiempo sin actividad.</p></div>
+              <div class="player-stats"><article class="panel"><p class="eyebrow north-ink">JUGADOR DE ARRIBA</p><strong id="north-coverage" class="stat-number">—</strong><span class="small-note">Cobertura de seguimiento</span><div id="north-zones" class="zone-bars"></div></article><article class="panel"><p class="eyebrow south-ink">JUGADOR DE ABAJO</p><strong id="south-coverage" class="stat-number">—</strong><span class="small-note">Cobertura de seguimiento</span><div id="south-zones" class="zone-bars"></div></article></div>
+          </div><aside class="panel map-panel"><div class="panel-top"><strong>La pista, desde arriba</strong><span id="map-time" class="pill">00.0 s</span></div><canvas id="result-map" width="500" height="1000" role="img" aria-label="Posiciones estimadas sobre una pista de tenis con márgenes de salida"></canvas><div class="segmented" role="group" aria-label="Capa del minimapa"><button data-map-mode="positions" aria-pressed="true">Posiciones</button><button data-map-mode="density" aria-pressed="false">Densidad</button></div><label class="map-filter" for="player-filter">Mostrar<select id="player-filter"><option value="both">Ambos jugadores</option><option value="north">Solo arriba</option><option value="south">Solo abajo</option></select></label><p id="map-caption" class="caption">Puntos de apoyo estimados. La pelota no se proyecta al suelo.</p></aside></div>
+          <div class="panel export-panel"><div><h3>El análisis también es tuyo.</h3><p class="muted">Vídeo anotado, observaciones CSV y registro JSON. Sin enviar nada a una cuenta externa.</p></div><div id="export-links" class="export-links"></div></div><p id="result-metrics-note" class="caption"></p>
+        </section>
+      </section>
+
+      <section id="screen-library" class="screen" hidden><div class="section-head"><div><p class="eyebrow">TODO EN ESTE EQUIPO</p><h1 class="compact-heading">Tu biblioteca.</h1><p class="lead">Clips, análisis en curso y resultados guardados.</p></div><button class="button primary" data-screen="studio" id="library-new">＋ Analizar un clip</button></div><div id="library-empty" class="panel empty-state" hidden><h2>Tu primer análisis empieza con un vídeo.</h2><p>Cuando cargues uno aparecerá aquí, sin necesidad de crear una cuenta.</p></div><div id="library-list"></div></section>
+
+      <section id="screen-about" class="screen" hidden><p class="eyebrow">QUÉ HAY DETRÁS</p><h1 class="compact-heading">Sin nube.<br><span>Sin humo.</span></h1><div class="about-grid"><article class="panel"><h2>Privacidad local</h2><p>El servidor solo escucha en este ordenador. Los clips, modelos y resultados se guardan fuera de OneDrive, en tu carpeta local de aplicación.</p><code id="storage-path"></code><button id="copy-storage" class="text-button">Copiar ubicación</button><p>No hay cuentas, analítica de terceros ni servicios de pago. Si tú compartes un resultado o cambias la ubicación, esa decisión ya es tuya.</p></article><article class="panel"><h2>Modelos preentrenados</h2><ul id="model-list"></ul><p>Los modelos no se han entrenado aquí ni garantizan resultados en cualquier cámara. Las fichas de procedencia y licencias declaradas están guardadas junto a los pesos locales.</p></article><article class="panel"><h2>Qué puedes interpretar</h2><p>Observaciones de personas, posiciones aproximadas sobre una pista confirmada, cobertura y distribución de muestras por zonas.</p><p>La intensidad del mapa depende de cuántas observaciones hay. No es posesión, esfuerzo ni un diagnóstico.</p></article><article class="panel"><h2>Qué no mide</h2><p>No calcula marcador, velocidad fiable, distancia física validada, lesiones, golpes, botes ni dentro/fuera. No reconstruye la pelota en 3D.</p><p>Los cambios de plano y las oclusiones pueden interrumpir el seguimiento. Las advertencias forman parte del resultado, no se esconden.</p></article></div></section>
+    </main>
+    <footer class="main-footer"><span>TENNIS / LAB · Gabriele Ruggeri</span><span>Una herramienta para observar. La validación viene antes que la promesa.</span></footer>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
