@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tennis Lab · Comparación original y análisis</title>
+  <style>
+    :root{color-scheme:dark;font-family:"Segoe UI",Arial,sans-serif;background:#102126;color:#edf5ed}
+    *{box-sizing:border-box}body{max-width:1500px;margin:auto;padding:35px 25px;line-height:1.65}
+    h1{font-size:clamp(28px,4vw,45px);line-height:1.2;margin:10px 0 20px;letter-spacing:-1px}
+    h1 span{color:#d9fa73}.eyebrow{font-size:11px;letter-spacing:2px;color:#9bb6b8}
+    p{color:#bed0d1}.videos{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:25px}
+    article{min-width:0;background:#172d32;border:1px solid #355054;border-radius:10px;overflow:hidden}
+    h2{font-size:16px;margin:14px 18px}video{width:100%;display:block;background:#070d0f}
+    .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:25px 0}
+    button,a.button{border:0;border-radius:6px;padding:12px 18px;background:#d9fa73;color:#17261b;font:600 13px "Segoe UI",sans-serif;cursor:pointer;text-decoration:none}
+    button:disabled{opacity:.5;cursor:wait}button.secondary{background:#30474d;color:#edf5ed}
+    button:focus-visible,a:focus-visible{outline:3px solid #72e1d1;outline-offset:4px}
+    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0}
+    .metrics div{background:#172d32;border:1px solid #355054;padding:20px;border-radius:8px}
+    .metrics strong{display:block;font-size:36px;color:#d9fa73}.metrics span{font-size:12px;color:#bed0d1}
+    .notice{border-left:3px solid #ffad78;background:#322f27;padding:15px 22px;font-size:13px}
+    .notice p,.notice li{color:#f0dfbd}.notice p{margin:8px 0}.notice ul{padding-left:20px}
+    footer{border-top:1px solid #355054;margin-top:30px;padding-top:20px;font-size:12px}
+    a{color:#80e1d3}#error{color:#ffb7a9}#time{font:12px Consolas,monospace;color:#bed0d1}
+    @media(max-width:750px){body{padding:25px 17px}.videos{grid-template-columns:1fr}.metrics{gap:9px}.metrics div{padding:12px}.metrics strong{font-size:28px}.metrics span{font-size:10px}}
+  </style>
+</head>
+<body>
+  <p class="eyebrow">TENNIS / LAB · COMPARACIÓN DEL MISMO FRAGMENTO</p>
+  <h1>Lo que se grabó.<br><span>Lo que observó el sistema.</span></h1>
+  <p id="description">Cargando los datos del análisis…</p>
+  <p id="error" role="alert" hidden></p>
+  <div class="controls">
+    <button id="play" type="button" disabled>Reproducir ambos</button>
+    <button id="pause" class="secondary" type="button">Pausar</button>
+    <button id="restart" class="secondary" type="button">Volver al inicio</button>
+    <span id="time">—</span>
+  </div>
+  <div class="videos">
+    <article><h2>01 · Original normalizado, sin los nuevos overlays</h2><video id="original" controls playsinline muted preload="metadata" aria-label="Fragmento original"></video></article>
+    <article><h2>02 · Resultado del análisis</h2><video id="analysis" controls playsinline muted preload="metadata" aria-label="Fragmento analizado"></video></article>
+  </div>
+  <div class="metrics">
+    <div><strong id="camera">—</strong><span>Muestras con registro de cámara válido</span></div>
+    <div><strong id="south">—</strong><span>Muestras con observación del jugador de abajo</span></div>
+    <div><strong id="north">—</strong><span>Muestras con observación del jugador de arriba</span></div>
+  </div>
+  <section class="notice">
+    <p><strong>Cobertura no es precisión.</strong> Los huecos no se rellenan con posiciones inventadas. Ambos vídeos corresponden exactamente al mismo intervalo y no tienen audio.</p>
+    <ul id="warnings"></ul>
+    <p id="metrics-note"></p>
+  </section>
+  <div class="controls"><a id="download" class="button" download>Guardar vídeo analizado</a><a id="csv" download>Observaciones CSV</a><a id="json" download>Registro JSON</a><a href="/">Volver a Tennis Lab</a></div>
+  <footer><p id="credit">Fuente: grabación aportada por el usuario.</p><p>Procesamiento local con Tennis Lab. Ninguna grabación se envía a terceros desde esta página.</p></footer>
+  <script>
+    "use strict";
+    const original=document.querySelector("#original"), analysis=document.querySelector("#analysis");
+    const error=document.querySelector("#error"), time=document.querySelector("#time");
+    let duration=0;
+    function report(message){error.textContent=message;error.hidden=false;}
+    function align(){
+      if(analysis.readyState>=1&&Math.abs(analysis.currentTime-original.currentTime)>0.18)analysis.currentTime=original.currentTime;
+      time.textContent=`${original.currentTime.toFixed(1).padStart(4,"0")} / ${duration.toFixed(1)} s`;
+    }
+    document.querySelector("#play").addEventListener("click",async()=>{
+      align();
+      try{await Promise.all([original.play(),analysis.play()]);}
+      catch(failure){original.pause();analysis.pause();report(`Pulsa reproducir en los vídeos: ${failure.message}`);}
+    });
+    document.querySelector("#pause").addEventListener("click",()=>{original.pause();analysis.pause();});
+    document.querySelector("#restart").addEventListener("click",()=>{original.pause();analysis.pause();original.currentTime=0;analysis.currentTime=0;align();});
+    original.addEventListener("timeupdate",align);
+    original.addEventListener("seeked",align);
+    original.addEventListener("ended",()=>analysis.pause());
+    for(const video of [original,analysis])video.addEventListener("error",()=>report("No se ha podido reproducir el vídeo. Puedes descargar el MP4 desde el análisis."));
+    async function load(){
+      const match=location.pathname.match(/^\/api\/jobs\/([a-f0-9-]+)\/comparison$/);
+      if(!match)throw new Error("Abre esta comparación desde un análisis terminado en la biblioteca.");
+      const base=`/api/jobs/${match[1]}/files/`;
+      const response=await fetch(base+"analysis.json");
+      if(!response.ok)throw new Error(`No se ha podido leer el análisis (${response.status}).`);
+      const result=await response.json(), summary=result.summary;
+      duration=summary.duration;
+      document.querySelector("#description").textContent=`${duration.toFixed(1)} s, desde el segundo ${result.config.start.toFixed(1)} de la grabación. ${summary.mode==="complete"?"Incluye candidatos de pelota experimentales.":"Modo jugadores: este resultado no incluye seguimiento de pelota."}`;
+      for(const [id,value] of [["camera",summary.camera_coverage],["north",summary.players.north.coverage],["south",summary.players.south.coverage]])document.querySelector("#"+id).textContent=`${Math.round(value*100)} %`;
+      for(const warning of summary.warnings){const item=document.createElement("li");item.textContent=warning;document.querySelector("#warnings").append(item);}
+      document.querySelector("#metrics-note").textContent=summary.metrics_note;
+      original.src=base+"original.mp4";analysis.src=base+"analysis.mp4";
+      for(const [id,file] of [["download","analysis.mp4"],["csv","observations.csv"],["json","analysis.json"]])document.querySelector("#"+id).href=base+file;
+      const credit=result.source_credit;
+      if(credit){
+        const paragraph=document.querySelector("#credit");
+        paragraph.textContent=`Fuente: ${credit.author} · ${credit.provider||"Wikimedia Commons"} · ${credit.license}. Modificaciones: recorte, normalización, audio eliminado y overlays. `;
+        for(const [value,label] of [[credit.source_url,"Ver fuente"],[credit.license_url,"Licencia"]]){
+          if(!value)continue;
+          const url=new URL(value);
+          if(url.protocol!=="https:")continue;
+          const link=document.createElement("a");link.href=url.href;link.textContent=label;link.target="_blank";link.rel="noopener noreferrer";paragraph.append(link,document.createTextNode(" · "));
+        }
+      }
+      document.querySelector("#play").disabled=false;align();
+    }
+    load().catch(failure=>report(failure.message));
+  </script>
+</body>
+</html>

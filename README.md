@@ -74,9 +74,34 @@ ejecuta este motor Python ni procesa clips.
 7. Empieza por **Jugadores y pista**. El modo **Anadir pelota** es experimental y sensiblemente mas lento.
 8. Explora el resultado o vuelve mas tarde a la biblioteca.
 
+### Si no se ven las esquinas exteriores
+
+En **Referencias visibles para calibrar**, puedes seleccionar la columna
+izquierda o derecha de cuadros de saque. Marca las cuatro intersecciones
+de las dos lineas de saque con la linea central y el lateral de individuales
+de esa columna, en orden horario desde el punto lejano izquierdo.
+
+El rectangulo abarca ambos lados de la red. **La cinta superior de la red
+no es una referencia del suelo y no debe utilizarse.** Si las cuatro
+intersecciones tampoco se ven o estan tapadas, elige otro inicio del clip.
+
+Este modo extrapola la geometria fuera del rectangulo visible. Se identifica
+como calibracion parcial en la configuracion y en las advertencias del
+resultado. No convierte esas posiciones en mediciones fisicas validadas.
+Cambiar la referencia borra los puntos anteriores y exige confirmarlos
+de nuevo. Las calibraciones existentes conservan el comportamiento anterior.
+
+En calibracion parcial, la camara se comprueba fotograma a fotograma con
+flujo optico bidireccional y homografias robustas. Los jugadores se excluyen
+de las referencias estaticas desde el primer fotograma. Si se pierde el
+registro, se buscan correspondencias ORB con la toma inicial y se exige
+ademas apoyo en las lineas de la pista antes de volver a mostrar el mapa.
+Los fotogramas sin ajuste fiable siguen siendo huecos, no trayectorias inventadas.
+
 ### Que clip funciona mejor
 
-- Individuales, con la pista completa visible y la camara situada hacia el fondo.
+- Individuales, con la pista completa o las cuatro referencias interiores
+  elegidas realmente visibles y la camara situada hacia el fondo.
 - Una sola toma estable, sin repeticiones ni cambios de plano.
 - Preferiblemente 720p o 1080p, sin graficos encima de los jugadores.
 - Un fragmento de 5 a 15 segundos para la primera prueba.
@@ -94,6 +119,8 @@ esta aplicacion.
 
 - MP4 anotado, sin audio.
 - Comparacion con el fragmento original normalizado, conservando el instante del video.
+- Enlace **Comparar ambos** para reproducir original y resultado juntos en una
+  pagina independiente, con las advertencias y la atribucion de la fuente.
 - Minimapa de apoyos estimados, con margenes fuera de las lineas.
 - Densidad de observaciones y filtro por mitad de pista.
 - Cobertura temporal de jugador de arriba, jugador de abajo y pelota.
@@ -118,7 +145,10 @@ El modo pelota devuelve candidatos observados en pixeles de imagen. La intensida
 
 **No se calculan** velocidades fiables, distancias fisicas validadas, marcador, botes, numero de golpes, ganador del punto, lesiones ni decisiones dentro/fuera.
 
-Si se pierde el registro de camara, el minimapa deja de mostrar esas posiciones. Recorta una nueva toma y vuelve a calibrar; no se recuperan automaticamente cambios de plano arbitrarios.
+Si se pierde el registro de camara, el minimapa deja de mostrar esas
+posiciones. El modo parcial puede recuperar el mismo encuadre mediante
+referencias estaticas verificadas, pero no resuelve cambios de plano
+arbitrarios. Si no recupera una toma fiable, recorta otra y calibra de nuevo.
 
 ## Tiempo de procesamiento
 
@@ -216,6 +246,9 @@ Las coordenadas del ejemplo deben sustituirse por las de tu grabacion
 (normalizadas entre 0 y 1). El clip debe contener al menos tres segundos de
 individuales visibles; `--start` selecciona su inicio y `--url` otro puerto
 local. Los scripts no necesitan el video original del desarrollador.
+Para una referencia interior, anade
+`--calibration-reference service_left` o `service_right` y utiliza sus
+cuatro coordenadas visibles, no las de las esquinas exteriores.
 
 La prueba de navegador necesita Playwright y Edge. Instala
 `requirements-dev.txt` y ejecuta `tools\verify_browser.py` con las mismas

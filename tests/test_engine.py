@@ -8,7 +8,10 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from court import LENGTH, WIDTH, WORLD_CORNERS, CourtCamera, court_matrix, project, validate_corners
+from court import (
+    CALIBRATION_REFERENCES, COURT_LINES, LENGTH, WIDTH, WORLD_CORNERS, CourtCamera,
+    court_matrix, line_support, project, validate_corners,
+)
 from engine import summarize
 from inference import Detection, PlayerSelector
 
@@ -39,6 +42,94 @@ class CourtTests(unittest.TestCase):
         state = camera.update(image, [])
         self.assertFalse(state.valid)
         self.assertIn("Textura", state.reason)
+
+    def test_initial_camera_features_exclude_moving_people(self):
+        rng = np.random.default_rng(24)
+        image = rng.integers(0, 256, (720, 1280, 3), dtype=np.uint8)
+        box = [400, 250, 700, 550]
+        camera = CourtCamera(image, court_matrix(QUAD, (1280, 720)), boxes=[box])
+        self.assertIsNotNone(camera.features)
+        features = camera.features.reshape(-1, 2) / camera.scale
+        inside_player = (
+            (features[:, 0] >= box[0]) & (features[:, 0] <= box[2])
+            & (features[:, 1] >= box[1]) & (features[:, 1] <= box[3])
+        )
+        self.assertFalse(np.any(inside_player))
+
+    def test_partial_camera_handles_projective_motion(self):
+        rng = np.random.default_rng(42)
+        image = rng.integers(0, 256, (360, 640, 3), dtype=np.uint8)
+        initial = court_matrix(QUAD, (640, 360), "service_left")
+        motion = np.array([[1, 0.025, 3], [0.015, 1, 2], [0.00015, -0.0001, 1]], np.float64)
+        moved = cv2.warpPerspective(image, motion, (640, 360))
+        camera = CourtCamera(image, initial, allow_partial=True)
+        state = camera.update(moved, [])
+        self.assertTrue(state.valid, state.reason)
+        actual = project(CALIBRATION_REFERENCES["service_left"], state.matrix)
+        expected = project(CALIBRATION_REFERENCES["service_left"], motion @ initial)
+        np.testing.assert_allclose(actual, expected, atol=1)
+
+    def test_partial_camera_recovers_only_with_static_correspondences(self):
+        rng = np.random.default_rng(52)
+        image = rng.integers(0, 256, (360, 640, 3), dtype=np.uint8)
+        matrix = court_matrix(QUAD, (640, 360), "service_left")
+        motion = np.array([[1, 0, 7], [0, 1, 4], [0, 0, 1]], np.float64)
+        camera = CourtCamera(image, matrix, allow_partial=True)
+        camera.lost = True
+        moved = cv2.warpPerspective(image, motion, (640, 360))
+        state = camera.update(moved, [])
+        self.assertTrue(state.valid, state.reason)
+        self.assertIn("recuperado", state.reason)
+        actual = project(CALIBRATION_REFERENCES["service_left"], state.matrix)
+        expected = project(CALIBRATION_REFERENCES["service_left"], motion @ matrix)
+        np.testing.assert_allclose(actual, expected, atol=1)
+
+    def test_partial_camera_does_not_recover_on_unrelated_scene(self):
+        rng = np.random.default_rng(53)
+        image = rng.integers(0, 256, (360, 640, 3), dtype=np.uint8)
+        unrelated = rng.integers(0, 256, (360, 640, 3), dtype=np.uint8)
+        camera = CourtCamera(image, court_matrix(QUAD, (640, 360)), allow_partial=True)
+        camera.lost = True
+        state = camera.update(unrelated, [])
+        self.assertFalse(state.valid)
+
+    def test_partial_reference_round_trip_uses_service_coordinates(self):
+        for reference in ("service_left", "service_right"):
+            with self.subTest(reference=reference):
+                matrix = court_matrix(QUAD, (1280, 720), reference)
+                actual = project(CALIBRATION_REFERENCES[reference], matrix)
+                np.testing.assert_allclose(actual, np.array(QUAD) * [1280, 720], atol=1e-3)
+                restored = project(actual, np.linalg.inv(matrix))
+                np.testing.assert_allclose(restored, CALIBRATION_REFERENCES[reference], atol=1e-4)
+
+    def test_service_midpoint_projects_to_net_ground_not_net_tape(self):
+        matrix = court_matrix(QUAD, (1280, 720), "service_left")
+        midpoint = [(1.37 + WIDTH / 2) / 2, LENGTH / 2]
+        image_point = project([midpoint], matrix)
+        restored = project(image_point, np.linalg.inv(matrix))[0]
+        self.assertAlmostEqual(float(restored[1]), LENGTH / 2, places=4)
+
+    def test_unknown_reference_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "desconocida"):
+            court_matrix(QUAD, (1280, 720), "invented")
+
+    def test_old_calibration_is_unchanged(self):
+        np.testing.assert_array_equal(
+            court_matrix(QUAD, (1280, 720)),
+            court_matrix(QUAD, (1280, 720), "doubles"),
+        )
+
+    def test_partial_line_support_ignores_offscreen_lines_only_when_enabled(self):
+        pixels = np.array([[473, 449], [785, 446], [842, 574], [211, 575]])
+        matrix = court_matrix((pixels / [1280, 720]).tolist(), (1280, 720), "service_left")
+        image = np.zeros((720, 1280, 3), np.uint8)
+        for line in COURT_LINES:
+            a, b = np.rint(project(line, matrix)).astype(int)
+            visible, start, end = cv2.clipLine((0, 0, 1280, 720), tuple(a), tuple(b))
+            if visible:
+                cv2.line(image, start, end, (255, 255, 255), 3)
+        self.assertEqual(line_support(image, matrix), 0)
+        self.assertGreater(line_support(image, matrix, allow_partial=True), 0.95)
 
 
 class PlayerTests(unittest.TestCase):

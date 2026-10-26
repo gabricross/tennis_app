@@ -12,6 +12,15 @@ from config import MODELS
 
 WIDTH, LENGTH = 10.97, 23.77
 WORLD_CORNERS = np.array([[0, 0], [WIDTH, 0], [WIDTH, LENGTH], [0, LENGTH]], np.float32)
+CALIBRATION_REFERENCES = {
+    "doubles": WORLD_CORNERS,
+    "service_left": np.array(
+        [[1.37, 6.4], [WIDTH / 2, 6.4], [WIDTH / 2, 17.37], [1.37, 17.37]], np.float32
+    ),
+    "service_right": np.array(
+        [[WIDTH / 2, 6.4], [9.60, 6.4], [9.60, 17.37], [WIDTH / 2, 17.37]], np.float32
+    ),
+}
 COURT_LINES = [
     [[0, 0], [WIDTH, 0]], [[0, LENGTH], [WIDTH, LENGTH]],
     [[0, 0], [0, LENGTH]], [[WIDTH, 0], [WIDTH, LENGTH]],
@@ -55,9 +64,13 @@ def validate_corners(corners) -> np.ndarray:
     return values
 
 
-def court_matrix(corners, size: tuple[int, int]) -> np.ndarray:
+def court_matrix(corners, size: tuple[int, int], reference: str = "doubles") -> np.ndarray:
+    if reference not in CALIBRATION_REFERENCES:
+        raise ValueError("Referencia de calibración desconocida.")
     values = validate_corners(corners)
-    return cv2.getPerspectiveTransform(WORLD_CORNERS, values * np.array(size, np.float32))
+    return cv2.getPerspectiveTransform(
+        CALIBRATION_REFERENCES[reference], values * np.array(size, np.float32)
+    )
 
 
 def white_distance(image: np.ndarray) -> np.ndarray:
@@ -66,14 +79,17 @@ def white_distance(image: np.ndarray) -> np.ndarray:
     return cv2.distanceTransform(255 - mask, cv2.DIST_L2, 3)
 
 
-def line_support(image: np.ndarray, matrix: np.ndarray, tolerance: float = 5.0) -> float:
+def line_support(
+    image: np.ndarray, matrix: np.ndarray, tolerance: float = 5.0, *, allow_partial: bool = False
+) -> float:
     distances = white_distance(image)
     points = project(WORLD_LINE_SAMPLES, matrix)
     inside = (
         (points[:, 0] >= 0) & (points[:, 0] < image.shape[1])
         & (points[:, 1] >= 0) & (points[:, 1] < image.shape[0])
     )
-    if np.mean(inside) < 0.8:
+    minimum_visible = 0.2 if allow_partial else 0.8
+    if np.mean(inside) < minimum_visible:
         return 0.0
     xy = np.rint(points[inside]).astype(int)
     xy[:, 0] = np.clip(xy[:, 0], 0, image.shape[1] - 1)
@@ -145,17 +161,34 @@ class CameraState:
 
 
 class CourtCamera:
-    def __init__(self, image: np.ndarray, matrix: np.ndarray) -> None:
+    def __init__(
+        self, image: np.ndarray, matrix: np.ndarray, *, allow_partial: bool = False,
+        boxes: list | None = None,
+    ) -> None:
         self.scale = 640 / image.shape[1]
         self.gray = self._gray(image)
         self.matrix = matrix
         self.previous_image = image
-        self.features = self._features(image, [])
-        self.initial_support = line_support(image, matrix, 6)
+        self.features = self._features(image, boxes if boxes is not None else [])
+        self.allow_partial = allow_partial
+        self.initial_support = line_support(image, matrix, 6, allow_partial=allow_partial)
         self.lost = False
+        self.reference_matrix = matrix.copy()
+        self.recovery_wait = 0
+        self.orb = cv2.ORB_create(nfeatures=1800, edgeThreshold=15, fastThreshold=10)
+        self.reference_keypoints, self.reference_descriptors = self.orb.detectAndCompute(
+            self.gray, self._static_mask(self.gray.shape, boxes if boxes is not None else [])
+        ) if allow_partial else ([], None)
 
     def _gray(self, image):
         return cv2.cvtColor(cv2.resize(image, None, fx=self.scale, fy=self.scale), cv2.COLOR_BGR2GRAY)
+
+    def _static_mask(self, shape, boxes):
+        mask = np.full(shape, 255, np.uint8)
+        for box in boxes:
+            x1, y1, x2, y2 = np.rint(np.array(box) * self.scale).astype(int)
+            cv2.rectangle(mask, (x1 - 3, y1 - 3), (x2 + 3, y2 + 3), 0, -1)
+        return mask
 
     def _features(self, image, boxes):
         gray = self._gray(image)
@@ -163,13 +196,61 @@ class CourtCamera:
         mask = np.zeros(gray.shape, np.uint8)
         cv2.fillConvexPoly(mask, polygon.astype(np.int32), 255)
         mask = cv2.dilate(mask, np.ones((21, 21), np.uint8))
-        for box in boxes:
-            x1, y1, x2, y2 = np.rint(np.array(box) * self.scale).astype(int)
-            cv2.rectangle(mask, (x1 - 3, y1 - 3), (x2 + 3, y2 + 3), 0, -1)
+        mask = cv2.bitwise_and(mask, self._static_mask(gray.shape, boxes))
         return cv2.goodFeaturesToTrack(gray, 400, 0.008, 7, mask=mask)
+
+    def _recover(self, image, boxes) -> CameraState:
+        unavailable = CameraState(self.matrix, False, "Sin correspondencias estáticas fiables", 0)
+        if self.recovery_wait:
+            self.recovery_wait -= 1
+            return unavailable
+        self.recovery_wait = 5
+        if self.reference_descriptors is None:
+            return unavailable
+        gray = self._gray(image)
+        keypoints, descriptors = self.orb.detectAndCompute(
+            gray, self._static_mask(gray.shape, boxes)
+        )
+        if descriptors is None or len(descriptors) < 20:
+            return unavailable
+        pairs = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(
+            self.reference_descriptors, descriptors, k=2
+        )
+        matches = [
+            pair[0] for pair in pairs if len(pair) == 2 and pair[0].distance < 0.72 * pair[1].distance
+        ]
+        if len(matches) < 20:
+            return unavailable
+        reference = np.float32([self.reference_keypoints[m.queryIdx].pt for m in matches])
+        current = np.float32([keypoints[m.trainIdx].pt for m in matches])
+        motion, accepted = cv2.findHomography(reference, current, cv2.RANSAC, 2, confidence=0.995)
+        if motion is None or accepted is None or np.mean(accepted) < 0.6:
+            return unavailable
+        inliers = reference[accepted.ravel() == 1]
+        if len(inliers) < 15 or cv2.contourArea(cv2.convexHull(inliers)) < gray.size * 0.02:
+            return unavailable
+        height, width = gray.shape
+        viewport = np.float32([[0, 0], [width, 0], [width, height], [0, height]])
+        transformed = project(viewport, motion).astype(np.float32)
+        area_ratio = abs(cv2.contourArea(transformed)) / gray.size
+        if not cv2.isContourConvex(transformed) or not 0.5 < area_ratio < 2:
+            return unavailable
+        scale = np.diag([self.scale, self.scale, 1])
+        candidate = np.linalg.inv(scale) @ motion @ scale @ self.reference_matrix
+        support = line_support(image, candidate, 7, allow_partial=True)
+        if support < max(0.3, self.initial_support * 0.55):
+            return CameraState(self.matrix, False, "Reencuadre rechazado: líneas no alineadas", support)
+        self.matrix = candidate
+        self.gray = gray
+        self.features = self._features(image, boxes)
+        self.lost = False
+        self.recovery_wait = 0
+        return CameraState(candidate, True, "Registro recuperado con referencias ORB + RANSAC", support)
 
     def update(self, image, boxes) -> CameraState:
         if self.lost:
+            if self.allow_partial:
+                return self._recover(image, boxes)
             return CameraState(self.matrix, False, "Cambio de plano o registro perdido", 0)
         gray = self._gray(image)
         if self.features is None or len(self.features) < 12:
@@ -182,22 +263,48 @@ class CourtCamera:
             self.lost = True
             return CameraState(self.matrix, False, "Flujo óptico no disponible", 0)
         good = status.ravel() == 1
+        if self.allow_partial:
+            backward, backward_status, _ = cv2.calcOpticalFlowPyrLK(
+                gray, self.gray, points, None, winSize=(25, 25), maxLevel=3
+            )
+            if backward is None or backward_status is None:
+                self.lost = True
+                return CameraState(self.matrix, False, "No se puede verificar el flujo inverso", 0)
+            backward_error = np.linalg.norm(self.features - backward, axis=2).ravel()
+            good &= (backward_status.ravel() == 1) & (backward_error < 1.5)
         old, new = self.features[good].reshape(-1, 2), points[good].reshape(-1, 2)
         if len(old) < 12:
             self.lost = True
             return CameraState(self.matrix, False, "Se han perdido las referencias de la pista", 0)
-        affine, accepted = cv2.estimateAffinePartial2D(old, new, method=cv2.RANSAC, ransacReprojThreshold=2)
-        if affine is None or accepted is None or np.mean(accepted) < 0.55:
+        if self.allow_partial:
+            motion, accepted = cv2.findHomography(old, new, cv2.RANSAC, 2, confidence=0.995)
+        else:
+            affine, accepted = cv2.estimateAffinePartial2D(
+                old, new, method=cv2.RANSAC, ransacReprojThreshold=2
+            )
+            motion = np.vstack([affine, [0, 0, 1]]) if affine is not None else None
+        if motion is None or accepted is None or np.mean(accepted) < 0.55:
             self.lost = True
             return CameraState(self.matrix, False, "El movimiento no supera los controles geométricos", 0)
-        motion = np.vstack([affine, [0, 0, 1]])
         displacement = np.median(np.linalg.norm(old - new, axis=1))
-        if displacement > 90 or not 0.85 < np.linalg.det(motion[:2, :2]) < 1.18:
+        if self.allow_partial:
+            inliers = old[accepted.ravel() == 1]
+            if len(inliers) < 12 or cv2.contourArea(cv2.convexHull(inliers)) < gray.size * 0.002:
+                self.lost = True
+                return CameraState(self.matrix, False, "Referencias estáticas demasiado concentradas", 0)
+            height, width = gray.shape
+            viewport = np.array([[0, 0], [width, 0], [width, height], [0, height]], np.float32)
+            transformed = project(viewport, motion).astype(np.float32)
+            area_ratio = abs(cv2.contourArea(transformed)) / gray.size
+            scale_valid = cv2.isContourConvex(transformed) and 0.65 < area_ratio < 1.55
+        else:
+            scale_valid = 0.85 < np.linalg.det(motion[:2, :2]) < 1.18
+        if displacement > 90 or not scale_valid:
             self.lost = True
             return CameraState(self.matrix, False, "Corte o zoom demasiado grande", 0)
         scale = np.diag([self.scale, self.scale, 1])
         candidate = np.linalg.inv(scale) @ motion @ scale @ self.matrix
-        support = line_support(image, candidate, 7)
+        support = line_support(image, candidate, 7, allow_partial=self.allow_partial)
         if self.initial_support > 0.3 and support < max(0.12, self.initial_support * 0.4):
             self.lost = True
             return CameraState(self.matrix, False, "Las líneas ya no respaldan la proyección", support)

@@ -209,14 +209,20 @@ def analyze_clip(
     if not success or total < FPS // 2:
         raise RuntimeError("No se ha podido preparar un fragmento de vídeo válido.")
     height, width = frame.shape[:2]
-    matrix = court_matrix(settings["corners"], (width, height))
-    camera = CourtCamera(frame, matrix)
+    reference = settings.get("calibration_reference", "doubles")
+    matrix = court_matrix(settings["corners"], (width, height), reference)
     selector = PlayerSelector()
     people = models.person_detector()
+    initial_detections = people.detect(frame)
+    camera = CourtCamera(
+        frame, matrix, allow_partial=reference != "doubles",
+        boxes=[detection.box for detection in initial_detections],
+    )
     ball = models.ball_detector() if settings["mode"] == "complete" else None
     frames = deque(maxlen=3)
     stride = 3 if ball else 6
     samples = []
+    previous_boxes = [detection.box for detection in initial_detections]
     for index in range(total):
         check_cancel(event)
         if index:
@@ -225,9 +231,12 @@ def analyze_clip(
                 raise RuntimeError("El vídeo normalizado se interrumpió durante el análisis.")
         frames.append(frame.copy())
         if index % stride and index != total - 1:
+            if reference != "doubles":
+                state = camera.update(frame, previous_boxes)
+                matrix = state.matrix
             continue
         timestamp = index / FPS
-        detections = people.detect(frame)
+        detections = initial_detections if index == 0 else people.detect(frame)
         if index == 0:
             valid, reason, support = True, "Calibración confirmada por el usuario", camera.initial_support
         else:
@@ -259,6 +268,7 @@ def analyze_clip(
                     for d in extra
                 ])
         selected = selector.select(detections, matrix, timestamp) if valid else []
+        previous_boxes = [detection.box for detection in detections]
         point = ball.detect(frames, timestamp) if ball else None
         samples.append({
             "time": round(timestamp, 6), "frame": index, "camera_valid": valid,
@@ -270,11 +280,17 @@ def analyze_clip(
     capture.release()
     check_cancel(event)
     summary = summarize(samples, settings["mode"], total / FPS, time.perf_counter() - started)
+    if reference != "doubles":
+        summary["warnings"].insert(
+            0, "Calibración parcial manual: la proyección fuera de las referencias visibles "
+            "es una extrapolación geométrica, no una medición de precisión."
+        )
     if source_notice:
         summary["warnings"].insert(0, source_notice)
     credit_text = ""
     if source_credit:
-        credit_text = f"Source: {source_credit['author']} | Wikimedia Commons | {source_credit['license']} | cropped, normalized, analysis overlays"
+        provider = source_credit.get("provider", "Wikimedia Commons")
+        credit_text = f"Source: {source_credit['author']} | {provider} | {source_credit['license']} | cropped, normalized, analysis overlays"
     encode_result(original, directory / "analysis.mp4", samples, total, event, progress, credit_text)
     summary["total_seconds_including_render"] = time.perf_counter() - started
     result = {

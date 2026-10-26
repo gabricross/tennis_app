@@ -212,6 +212,8 @@
     $("#input-notice").hidden = !clip.metadata.input_notice;
     $("#input-notice").textContent = clip.metadata.input_notice || "";
     $("#confirm-court").checked = false;
+    $("#calibration-reference").value = previous?.calibration_reference ?? "doubles";
+    referenceGuide();
     screen("studio");
     stage("configure");
     await loadPreview();
@@ -219,6 +221,22 @@
       state.points = previous.corners.map((point) => [...point]);
       drawCalibration();
     }
+  }
+  function referenceGuide() {
+    const reference = $("#calibration-reference").value;
+    if (reference === "doubles") {
+      $("#calibration-image").alt = "Marca las cuatro esquinas exteriores de dobles visibles.";
+      $("#reference-title").textContent = "Las líneas exteriores, no las de individuales.";
+      $("#reference-help").textContent = "Marca las cuatro esquinas de dobles que realmente se ven.";
+      return;
+    }
+    const side = reference === "service_left" ? "izquierda" : "derecha";
+    $("#calibration-image").alt = `Marca las cuatro intersecciones visibles de la columna ${side} de cuadros de saque, no la red.`;
+    $("#reference-title").textContent = `La columna ${side} de cuadros de saque.`;
+    $("#reference-help").textContent = "Marca las intersecciones de la línea de saque lejana y la cercana "
+      + `con la línea central y el lateral de individuales de la ${side}. `
+      + "Son los cuatro extremos de un rectángulo que cruza la red; NO marques la cinta de la red. "
+      + "El minimapa fuera de ese rectángulo será una extrapolación.";
   }
   function range() {
     const start = Number($("#clip-start").value);
@@ -339,7 +357,10 @@
     const mode = $("input[name=analysis-mode]:checked").value;
     const job = await api("/api/jobs", {
       method: "POST",
-      body: JSON.stringify({ clip_id: state.clip.id, ...selected, mode, corners: state.points }),
+      body: JSON.stringify({
+        clip_id: state.clip.id, ...selected, mode, corners: state.points,
+        calibration_reference: $("#calibration-reference").value,
+      }),
     });
     state.job = job;
     stage("progress");
@@ -428,6 +449,11 @@
     $$("[data-map-mode]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.mapMode === "positions")));
     $("#result-view-label").textContent = "Vídeo analizado";
     $("#export-links").replaceChildren();
+    const comparison = element("a", "Comparar ambos ↗");
+    comparison.href = `/api/jobs/${job.id}/comparison`;
+    comparison.target = "_blank";
+    comparison.rel = "noopener";
+    $("#export-links").append(comparison);
     for (const [file, label] of [["analysis.mp4", "MP4"], ["observations.csv", "CSV"], ["analysis.json", "JSON"], ["report.zip", "Paquete ZIP"]]) {
       const link = element("a", `${label} ↓`);
       link.href = asset(file);
@@ -562,6 +588,12 @@
   $("#clip-start").addEventListener("input", updateReadiness);
   $("#clip-duration").addEventListener("input", updateReadiness);
   $("#confirm-court").addEventListener("change", updateReadiness);
+  $("#calibration-reference").addEventListener("change", () => {
+    state.points = [];
+    $("#confirm-court").checked = false;
+    referenceGuide();
+    drawCalibration();
+  });
   $("#reset-corners").addEventListener("click", () => { state.points = []; $("#confirm-court").checked = false; drawCalibration(); });
   $("#auto-court").addEventListener("click", () => run(async () => {
     if (state.confirmedFrame !== range().start) throw new Error("Actualiza primero el fotograma del inicio.");
@@ -570,6 +602,8 @@
     try {
       const proposal = await api(`/api/clips/${state.clip.id}/court?time=${range().start}`);
       if (!proposal.corners) throw new Error(`${proposal.message} Marca las esquinas manualmente o elige otra toma.`);
+      $("#calibration-reference").value = "doubles";
+      referenceGuide();
       state.points = proposal.corners; $("#confirm-court").checked = false;
       drawCalibration();
       $("#corner-instruction").textContent = proposal.message;

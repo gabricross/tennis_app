@@ -55,7 +55,12 @@ def main() -> None:
             page.get_by_role("button", name="Actualizar fotograma", exact=True).click()
             page.get_by_role("button", name="Actualizar fotograma", exact=True).wait_for(state="visible")
             page.wait_for_function("() => !document.querySelector('#load-frame').disabled")
-        if settings.players_only:
+        if settings.reference != "doubles":
+            page.get_by_label("Referencias visibles para calibrar", exact=True).select_option(settings.reference)
+            if "NO marques la cinta de la red" not in page.locator("#reference-help").inner_text():
+                raise AssertionError("The service reference needs an explicit ground-plane guide.")
+            checks["partial_calibration_guide_visible"] = True
+        elif settings.players_only:
             if page.get_by_role("button", name="Proponer pista con IA", exact=True).is_enabled():
                 raise AssertionError("Court proposal must be unavailable without its model.")
             if page.locator("#complete-mode").is_enabled():
@@ -77,6 +82,18 @@ def main() -> None:
         if not page.get_by_role("button", name="Analizar mi fragmento", exact=False).is_enabled():
             raise AssertionError("A reviewed manual calibration should enable analysis.")
         checks["manual_corners_work"] = True
+        if settings.reference != "doubles":
+            page.get_by_label("Referencias visibles para calibrar", exact=True).select_option("doubles")
+            if page.locator("#corner-fields .corner-row").count() != 0 or page.locator("#confirm-court").is_checked():
+                raise AssertionError("Changing reference must clear the old points and review.")
+            if page.get_by_role("button", name="Analizar mi fragmento", exact=False).is_enabled():
+                raise AssertionError("Old coordinates must not enable a different reference.")
+            page.get_by_label("Referencias visibles para calibrar", exact=True).select_option(settings.reference)
+            for x, y in QUAD:
+                bounds = canvas.bounding_box()
+                canvas.click(position={"x": x * bounds["width"], "y": y * bounds["height"]})
+            page.get_by_label("He revisado las cuatro esquinas", exact=False).check()
+            checks["changing_reference_invalidates_old_points"] = True
         page.get_by_label("Inicio, en segundos", exact=True).fill(str(settings.start + 1))
         if page.get_by_role("button", name="Analizar mi fragmento", exact=False).is_enabled():
             raise AssertionError("Changing the start must invalidate the frame confirmation.")
@@ -86,6 +103,9 @@ def main() -> None:
         with page.expect_response(lambda response: response.url.endswith("/api/jobs") and response.request.method == "POST") as started:
             page.get_by_role("button", name="Analizar mi fragmento", exact=False).click()
         job = started.value.json()
+        if job["config"]["calibration_reference"] != settings.reference:
+            raise AssertionError("The API did not preserve the selected calibration reference.")
+        checks["calibration_reference_persisted"] = True
         page.locator("#progress-stage").wait_for(state="visible")
         checks["real_progress_visible"] = True
         page.locator("#results-stage").wait_for(state="visible", timeout=180000)
@@ -122,6 +142,26 @@ def main() -> None:
         if density == north_only:
             raise AssertionError("The player filter did not change the map.")
         checks["player_filter_works"] = True
+        with page.expect_popup() as popup:
+            page.get_by_role("link", name="Comparar ambos", exact=False).click()
+        comparison = popup.value
+        comparison.on("pageerror", lambda error: errors.append(str(error)))
+        comparison.wait_for_function(
+            "()=>[...document.querySelectorAll('video')].every(v=>v.readyState>=2)"
+            "&&!document.querySelector('#play').disabled"
+        )
+        comparison.get_by_role("button", name="Reproducir ambos", exact=True).click()
+        comparison.wait_for_function(
+            "()=>[...document.querySelectorAll('video')].every(v=>v.currentTime>0.3)"
+        )
+        comparison.get_by_role("button", name="Pausar", exact=True).click()
+        drift = comparison.evaluate(
+            "()=>Math.abs(document.querySelector('#original').currentTime-document.querySelector('#analysis').currentTime)"
+        )
+        if drift > 0.25 or comparison.locator("#error").is_visible():
+            raise AssertionError("The comparison videos did not play together.")
+        comparison.close()
+        checks["side_by_side_comparison_actually_plays"] = True
         with page.expect_download() as downloaded:
             page.get_by_role("link", name="CSV", exact=False).click()
         download = downloaded.value

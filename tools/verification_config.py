@@ -26,6 +26,7 @@ class VerificationConfig:
     start: float
     output: Path
     players_only: bool
+    reference: str
 
 
 def parse_arguments() -> VerificationConfig:
@@ -34,6 +35,7 @@ def parse_arguments() -> VerificationConfig:
     parser.add_argument("--url", default=f"http://127.0.0.1:{PORT}")
     parser.add_argument("--start", type=float, default=0)
     parser.add_argument("--players-only", action="store_true", help="Validate a light installation without court or ball models.")
+    parser.add_argument("--calibration-reference", choices=("doubles", "service_left", "service_right"), default="doubles")
     parser.add_argument("--corners", type=float, nargs=8, metavar="XY",
                         help="Four normalized outer corners, clockwise from the far-left corner.")
     arguments = parser.parse_args()
@@ -57,4 +59,5 @@ def parse_arguments() -> VerificationConfig:
     return VerificationConfig(
         arguments.video.resolve(), f"http://{parsed.hostname}:{port}", parsed.hostname,
         port, corners, arguments.start, HOME / "verification", arguments.players_only,
+        arguments.calibration_reference,
     )

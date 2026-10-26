@@ -13,6 +13,7 @@ import zipfile
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 import cv2
 from fastapi import FastAPI, HTTPException, Request
@@ -41,6 +42,7 @@ class AnalysisRequest(BaseModel):
     duration: float = Field(ge=1, le=MAX_ANALYSIS_SECONDS, allow_inf_nan=False)
     mode: str = "players"
     corners: list[list[float]]
+    calibration_reference: Literal["doubles", "service_left", "service_right"] = "doubles"
 
     @model_validator(mode="after")
     def valid_configuration(self):
@@ -360,6 +362,14 @@ def start_job(configuration: AnalysisRequest):
 @app.get("/api/jobs/{identity}")
 def job_status(identity: str):
     return require_job(identity)
+
+
+@app.get("/api/jobs/{identity}/comparison")
+def compare_job(identity: str):
+    job = require_job(identity)
+    if job["status"] not in FINISHED:
+        raise HTTPException(409, "La comparación estará disponible cuando termine el análisis.")
+    return FileResponse(ROOT / "web" / "comparison.html", media_type="text/html")
 
 
 @app.post("/api/jobs/{identity}/cancel")

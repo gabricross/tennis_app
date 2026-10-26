@@ -79,7 +79,10 @@ def main():
     checked("local_video_uploaded_through_real_ingestion", status == 201 and clip["metadata"]["duration"] >= 3)
     created.append(clip["id"])
     mode = "players" if SETTINGS.players_only else "complete"
-    base = {"clip_id": clip["id"], "start": SETTINGS.start, "duration": 2, "mode": mode, "corners": QUAD}
+    base = {
+        "clip_id": clip["id"], "start": SETTINGS.start, "duration": 2, "mode": mode,
+        "corners": QUAD, "calibration_reference": SETTINGS.reference,
+    }
     checked("invalid_corner_order_rejected", request("POST", "/api/jobs", {**base, "corners": [QUAD[0], QUAD[2], QUAD[1], QUAD[3]]})[0] == 422)
     checked("out_of_range_fragment_rejected", request("POST", "/api/jobs", {
         **base, "start": clip["metadata"]["duration"], "duration": 10,
@@ -110,11 +113,14 @@ def main():
     )
     checked("video_range_and_seek_supported", status == 206 and len(first_bytes) == 100 and any(key.lower() == "content-range" for key in headers))
     checked("csv_download_available", request("GET", f"/api/jobs/{job['id']}/files/observations.csv")[0] == 200)
+    comparison_status, comparison, _ = request("GET", f"/api/jobs/{job['id']}/comparison")
+    checked("comparison_page_available", comparison_status == 200 and b'Reproducir ambos' in comparison)
     status, archive, _ = request("GET", f"/api/jobs/{job['id']}/files/report.zip")
     checked("zip_download_available", status == 200 and archive.startswith(b"PK"))
     _, cancelled, _ = request("GET", f"/api/jobs/{queued['id']}")
     checked("queued_job_cancelled_without_success_fallback", cancelled["status"] == "cancelled")
     checked("cancelled_results_not_exposed", request("GET", f"/api/jobs/{queued['id']}/files/analysis.mp4")[0] == 409)
+    checked("cancelled_comparison_not_exposed", request("GET", f"/api/jobs/{queued['id']}/comparison")[0] == 409)
     checked("source_files_not_publicly_served", request("GET", "/config.py")[0] == 404)
     private = SETTINGS.output
     private.mkdir(exist_ok=True)
