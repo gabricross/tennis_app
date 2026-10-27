@@ -123,6 +123,11 @@ def main() -> None:
         checks["real_progress_visible"] = True
         page.locator("#results-stage").wait_for(state="visible", timeout=180000)
         checks["upload_to_results_complete"] = True
+        if "Distancia observada:" not in page.locator("#south-motion").inner_text():
+            raise AssertionError("The UI must expose observed player distance and estimated speed.")
+        if "km/h" not in page.locator("#south-current-speed").inner_text() and "no disponible" not in page.locator("#south-current-speed").inner_text():
+            raise AssertionError("Current speed must be explicitly estimated or unavailable.")
+        checks["estimated_player_movement_visible"] = True
         page.wait_for_function("() => document.querySelector('#result-video').readyState>=2")
         page.locator("#result-seek").evaluate(
             "el=>{el.value='0.8';el.dispatchEvent(new Event('input',{bubbles:true}));}"
@@ -173,6 +178,9 @@ def main() -> None:
         )
         if drift > 0.25 or comparison.locator("#error").is_visible():
             raise AssertionError("The comparison videos did not play together.")
+        if "m observados" not in comparison.locator("#movement-note").inner_text():
+            raise AssertionError("The comparison must include observed movement estimates.")
+        checks["comparison_exposes_player_movement"] = True
         if not settings.players_only:
             if not comparison.locator("#ball-card").is_visible():
                 raise AssertionError("The comparison must show per-frame ball coverage.")

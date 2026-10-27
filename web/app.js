@@ -446,6 +446,11 @@
     for (const side of ["north", "south"]) {
       $(`#${side}-coverage`).textContent = percent(summary.players[side].coverage);
       drawZones(side, summary.players[side].zones);
+      const movement = summary.players[side].movement;
+      const number = (value) => typeof value === "number" ? value.toFixed(1) : "—";
+      $(`#${side}-motion`).textContent = movement
+        ? `Distancia observada: ${number(movement.distance_m)} m · Media: ${number(movement.mean_speed_kmh)} km/h · Pico de ventana: ${number(movement.peak_speed_kmh)} km/h · ${number(movement.observed_seconds)} s evaluables. Estimaciones, no medidas certificadas.`
+        : "Análisis antiguo: vuelve a analizar para estimar velocidad y distancia con la geometría corregida.";
     }
     $("#result-metrics-note").textContent = summary.metrics_note;
     $("#result-seek").max = String(summary.duration);
@@ -489,8 +494,9 @@
     const segment = (a, b) => { context.beginPath(); context.moveTo(...worldPoint(a)); context.lineTo(...worldPoint(b)); context.stroke(); };
     for (const x of [0, 1.37, 9.60, 10.97]) segment([x, 0], [x, 23.77]);
     for (const y of [0, 23.77]) segment([0, y], [10.97, y]);
-    for (const y of [6.4, 17.37]) segment([1.37, y], [9.60, y]);
-    segment([5.485, 6.4], [5.485, 17.37]);
+    const service = state.result?.version >= 3 ? [23.77 / 2 - 6.4, 23.77 / 2 + 6.4] : [6.4, 17.37];
+    for (const y of service) segment([1.37, y], [9.60, y]);
+    segment([10.97 / 2, service[0]], [10.97 / 2, service[1]]);
     context.strokeStyle = "#d9fa73"; segment([0, 11.885], [10.97, 11.885]);
   }
   function resultSample(time) {
@@ -560,7 +566,16 @@
     $("#result-seek").value = String(time);
     $("#result-time").textContent = `${seconds(time)} del clip · ${seconds(state.job.config.start + time)} del original`;
     $("#map-time").textContent = seconds(time);
-    drawMap(resultSample(time));
+    const sample = resultSample(time);
+    for (const side of ["north", "south"]) {
+      const player = sample.camera_valid && time - sample.time <= 0.25
+        ? sample.players.find((entry) => entry.side === side) : null;
+      const speed = player?.motion?.speed_kmh;
+      $(`#${side}-current-speed`).textContent = typeof speed === "number"
+        ? `En este instante: ${speed.toFixed(1)} km/h estimados.`
+        : "En este instante: velocidad no disponible.";
+    }
+    drawMap(sample);
     drawTimeline(time);
   }
   async function switchResultView(view) {

@@ -280,7 +280,8 @@ def report(output: Path) -> None:
                      "os": platform.platform(), "python": platform.python_version()},
         "models": {p.name: {"bytes": p.stat().st_size, "sha256": sha256(p)}
                    for p in MODELS.glob("*.onnx")},
-        "note": "Ten distinct short recordings, single pass on a shared Windows desktop, not an isolated "
+        "note": "Cohort of ten distinct short recordings; this report includes the completed recordings "
+                "counted in aggregate. Single pass on a shared Windows desktop, not an isolated "
                 "repeated laboratory timing or a population-wide accuracy study. "
                 "Uncalibratable clips remain failures for court/player projection. "
                 "Coverage is not accuracy. Only TrackNet legacy/new use identical neural frames "
@@ -357,6 +358,17 @@ def report(output: Path) -> None:
                 f'{summary["players"]["south"]["coverage"]:.1%}; lejano '
                 f'{summary["players"]["north"]["coverage"]:.1%}. Cobertura, no precisión de posición.</p>'
             )
+            for side, label in (("south", "Cercano"), ("north", "Lejano")):
+                movement = summary["players"][side].get("movement")
+                if movement is not None:
+                    def number(value):
+                        return f"{value:.1f}" if value is not None else "no disponible"
+                    projection_note += (
+                        f'<p>{label}: distancia observada {number(movement["distance_m"])} m; '
+                        f'media {number(movement["mean_speed_kmh"])} km/h; pico estimado '
+                        f'{number(movement["peak_speed_kmh"])} km/h sobre '
+                        f'{movement["observed_seconds"]:.1f}s evaluables. No son medidas certificadas.</p>'
+                    )
         cards.append(
             f'<article><h2>{escape(identifier)}</h2><p>{escape(row["assessment"])}</p>'
             f'<p>Clip {row["video_seconds"]:.1f}s | análisis {row["processing_seconds"]:.1f}s | '
@@ -382,13 +394,14 @@ def report(output: Path) -> None:
     ) if total_quality else '<p>La cobertura aún no está contrastada con las etiquetas de revisión.</p>'
     (output / "VER_RESULTADOS.html").write_text(
         '<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
-        '<title>Tennis Lab - 10 pruebas reales</title><style>body{font:16px system-ui;background:#102126;color:#edf5ed;'
+        f'<title>Tennis Lab - {len(rows)} pruebas reales</title><style>body{{font:16px system-ui;background:#102126;color:#edf5ed;'
         'max-width:1400px;margin:auto;padding:24px}article{padding:20px;margin:25px 0;background:#172d32;border-radius:12px}'
         '.videos{display:grid;grid-template-columns:1fr 1fr;gap:14px}video{width:100%;max-height:650px;background:#000}'
         'a{color:#8ce8ce}p{line-height:1.6}@media(max-width:700px){.videos{grid-template-columns:1fr}}</style>'
         '<h1>Tennis Lab: pruebas de seguimiento</h1><p>Izquierda: original. Derecha: análisis real. '
         'Los vídeos sin calibración válida NO muestran jugadores proyectados. La pelota sigue siendo experimental. '
-        'Las marcas pueden ser erróneas. Cobertura no significa precisión.</p>'
+        'Las marcas pueden ser erróneas. Cobertura no significa precisión. '
+        'Velocidad de pelota no disponible: requiere calibración 3D o mediciones adicionales.</p>'
         f'<p>{aggregate["completed_recordings"]} grabaciones, {aggregate["video_seconds"]:.0f}s de vídeo. '
         f'{aggregate["calibrated_recordings"]} con referencias revisadas; '
         f'{aggregate["unscorable_court_recordings"]} sin proyección evaluable. '

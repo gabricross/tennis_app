@@ -50,6 +50,8 @@
     <p><strong>Cobertura no es precisión.</strong> Los huecos no se rellenan con posiciones inventadas. Ambos vídeos corresponden exactamente al mismo intervalo y no tienen audio.</p>
     <ul id="warnings"></ul>
     <p id="metrics-note"></p>
+    <p id="movement-note"></p>
+    <p>Velocidad de pelota no disponible: requiere calibración 3D o mediciones adicionales.</p>
   </section>
   <div class="controls"><a id="download" class="button" download>Guardar vídeo analizado</a><a id="csv" download>Observaciones CSV</a><a id="ball-csv" download hidden>Pelota CSV</a><a id="json" download>Registro JSON</a><a href="/">Volver a Tennis Lab</a></div>
   <footer><p id="credit">Fuente: grabación aportada por el usuario.</p><p>Procesamiento local con Tennis Lab. Ninguna grabación se envía a terceros desde esta página.</p></footer>
@@ -92,6 +94,14 @@
       }
       for(const warning of summary.warnings){const item=document.createElement("li");item.textContent=warning;document.querySelector("#warnings").append(item);}
       document.querySelector("#metrics-note").textContent=summary.metrics_note;
+      const movement=[];
+      for(const [side,label] of [["south","Abajo"],["north","Arriba"]]){
+        const values=summary.players[side].movement;
+        if(!values)continue;
+        const number=value=>typeof value==="number"?value.toFixed(1):"—";
+        movement.push(`${label}: ${number(values.distance_m)} m observados; media ${number(values.mean_speed_kmh)} km/h; pico de ventana ${number(values.peak_speed_kmh)} km/h. Estimaciones sobre ${number(values.observed_seconds)} s evaluables.`);
+      }
+      document.querySelector("#movement-note").textContent=movement.length?movement.join(" "):"Análisis antiguo: vuelve a analizar para obtener movimiento con la geometría corregida.";
       original.src=base+"original.mp4";analysis.src=base+"analysis.mp4";
       for(const [id,file] of [["download","analysis.mp4"],["csv","observations.csv"],["json","analysis.json"]])document.querySelector("#"+id).href=base+file;
       const credit=result.source_credit;

@@ -129,6 +129,60 @@ los metadatos embebidos del modelo declaran AGPL-3.0**. Esta discrepancia
 se conserva en su ficha local: revisa los derechos originales antes de
 redistribuirlo comercialmente. No se incluyen pesos en Git.
 
+Ambos motores ahora exigen una identidad de pelota con al menos tres
+observaciones y movimiento coherente, compensando la camara. Un candidato
+estatico fuerte no basta. Se rechazan desplazamientos compatibles con
+ruido estacionario; perder el registro obliga a confirmar otra vez.
+Las estelas usan identidad y continuidad explicitas: nunca unen huecos,
+saltos largos ni dos pelotas distintas. Se prefieren huecos a marcar una
+pelota de reserva. Una pelota sostenida o casi inmovil tambien puede
+quedar sin marcar; no se garantiza la identidad en todos los encuadres.
+Al reprocesar las detecciones neuronales cacheadas de las diez fuentes
+anteriores, la revision limitada paso de 13 posiciones correctas y 2
+incorrectas a 11 correctas, 0 incorrectas y 4 huecos sobre esas mismas
+15 etiquetas visibles. Es un intercambio deliberado entre cobertura y
+rechazo de candidatos falsos, no un test ciego ni una precision general.
+
+### Metros y km/h de jugadores (JSON version 3)
+
+La pista usa 23,77 x 10,97 m. **Las lineas de saque estan a 6,40 m de la
+red, no del fondo**: sus coordenadas longitudinales son 5,485 y 18,285 m.
+Se corrigio la geometria anterior de las referencias parciales. Los
+analisis anteriores no se convierten en medidas fisicas: hay que
+reanalizarlos. El mapa web conserva su geometria antigua al abrir JSON
+v1/v2; los nuevos resultados contienen `court_geometry`.
+Referencia: [ITF, reglas del tenis, regla 1](https://www.itftennis.com/en/about-us/governance/rules-and-regulations/).
+
+Los pies estimados por las cajas se proyectan al suelo usando la camara
+de cada instante. `kinematics.py` calcula distancia observada, tiempo
+evaluable, velocidad media y pico estimado de una ventana local. Usa
+mediana de tres observaciones, anclas de desplazamiento y una zona
+muerta de al menos 0,20 m, ampliada segun la proyeccion de 2 pixeles.
+La velocidad local es el incremento de esa misma distancia observada
+en una ventana continua de 0,3-0,6 s, no una derivada ruidosa entre dos
+cajas consecutivas. Un ancla sin movimiento resoluble se renueva tras
+0,6 s. El pico es el mayor promedio de ventana, no una velocidad instantanea.
+Se excluyen calibraciones con apoyo insuficiente, resolucion peor que
+0,75 m, saltos incompatibles con 12 m/s y huecos mayores de 0,25 s.
+Ni una perdida de camara entre muestras ni una oclusion crean recorrido.
+Los desplazamientos por debajo de la resolucion no producen un km/h
+inventado. La parte inicial de cada segmento requiere observaciones
+suficientes; puede haber distancia disponible sin velocidad local.
+
+Son **estimaciones**, no medidas certificadas: las cajas no son sensores
+de pies, la camara puede tener distorsion y una calibracion parcial
+extrapola fuera de sus referencias. La suma no es la distancia completa
+del partido cuando faltan observaciones. Una prueba analitica de 5 m/s
+recupera 18 km/h; eso valida las formulas, no la precision en video real.
+El MP4, la interfaz, la comparacion y `observations.csv` muestran las
+metricas y sus huecos. `motion_status` explica filtros o calentamiento.
+
+Por decision explicita del usuario, **no se calcula velocidad de pelota**.
+`summary.ball_speed` devuelve `available: false`, `speed_kmh: null` y
+la explicacion. La homografia del suelo no mide su vuelo; se necesita
+calibracion 3D o mediciones adicionales. El CSV de pelota deja esa
+columna vacia y conserva `track_id` y `continuous` para auditar la estela.
+
 ### Que clip funciona mejor
 
 - Individuales, con la pista completa o las cuatro referencias interiores
@@ -174,7 +228,7 @@ La densidad muestra el numero de observaciones del clip completo. No representa 
 
 El modo pelota devuelve candidatos observados en pixeles de imagen. La intensidad de TrackNet no es una probabilidad calibrada. La pelota **no se proyecta al suelo**, porque normalmente esta en el aire.
 El score de YOLO tampoco es una probabilidad calibrada de acierto.
-El JSON version 2 contiene `ball_samples`, una entrada por fotograma,
+Desde la version 2, el JSON contiene `ball_samples`, una entrada por fotograma,
 incluidos los huecos. La cobertura de pelota utiliza ese denominador,
 no el muestreo de jugadores. `ball.csv` conserva metodo, intensidad
 TrackNet cuando corresponde y score del detector YOLO por separado.
@@ -361,7 +415,7 @@ El directorio de salida incluye `VER_RESULTADOS.html`, `report.csv`,
 el informe separa un ejemplo a 30 W y 0,25 EUR/kWh del consumo real
 desconocido y no incluye preparacion, descargas ni otros experimentos.
 
-#### Resultado medido de esta iteracion
+#### Resultado historico de la iteracion anterior (version 2)
 
 En Windows 11, Ryzen 5 PRO 7530U (6 nucleos / 12 hilos), unos 14,8 GiB
 de RAM utilizable y Python 3.14.7, con YOLO 640 y dos hilos de inferencia:

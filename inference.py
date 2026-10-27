@@ -9,7 +9,7 @@ import numpy as np
 from config import MODELS
 from court import LENGTH, PLAY_BOUNDS, WIDTH, project, session
 from detection import Detection, PersonDetector
-from ball_motion import MotionBallDetector
+from ball_motion import ActiveBallSelector, MotionBallDetector
 
 
 class PlayerSelector:
@@ -95,9 +95,11 @@ class BallTracker:
         gray = cv2.cvtColor(cv2.resize(image, (640, 360)), cv2.COLOR_BGR2GRAY)
         if self.timestamp is not None and timestamp <= self.timestamp:
             raise ValueError("Ball frames must have strictly increasing timestamps.")
+        continuous = self.point is not None and self.timestamp is not None and timestamp - self.timestamp <= 0.05
         if self.gray is not None and np.mean(cv2.absdiff(gray, self.gray)) > 55:
             self.history.clear()
             self.point = None
+            continuous = False
         point = None
         intensity = None
         method = "TrackNet + temporal association"
@@ -130,6 +132,7 @@ class BallTracker:
                 _, point, intensity, reset = min(scored, key=lambda value: value[0])
                 if reset:
                     self.history.clear()
+                    continuous = False
                 self.history.append((timestamp, point.copy()))
                 self.neural_time = timestamp
         elif (
@@ -168,6 +171,7 @@ class BallTracker:
         return {
             "x": float(point[0] / 640 * width), "y": float(point[1] / 360 * height),
             "intensity": intensity, "observed": True, "method": method,
+            "continuous": continuous,
         }
 
 
@@ -178,7 +182,39 @@ class BallModel:
         self.reset()
 
     def reset(self) -> None:
-        self.tracker = BallTracker()
+        self.tracker = BallTracker(allow_reacquisition=True)
+        self.motion = MotionBallDetector()
+        self.active = ActiveBallSelector()
+        self.identity: int | None = None
+        self.last_observation: tuple[float, int] | None = None
+
+    def observe(self, image: np.ndarray, timestamp: float, candidates: list[dict] | None) -> dict | None:
+        moving = self.motion.candidates(image)
+        for candidate in candidates or []:
+            candidate["motion_support"] = any(
+                np.hypot(candidate["x"] - other["x"], candidate["y"] - other["y"]) <= 8
+                for other in moving
+            )
+        selected = self.active.update(candidates, timestamp, self.motion.affine)
+        identity = selected["track_id"] if selected is not None else self.active.active_id
+        if self.motion.affine is None or identity != self.identity:
+            self.tracker = BallTracker(allow_reacquisition=True)
+            self.identity = identity
+            self.last_observation = None
+        measurements: list[dict] | None = [selected] if selected is not None else []
+        if candidates is None and identity is not None and self.motion.affine is not None:
+            measurements = None
+        point = self.tracker.update(image, timestamp, measurements)
+        if point is not None and identity is not None:
+            point["track_id"] = identity
+            point["continuous"] = (
+                point["continuous"] and self.last_observation is not None and self.last_observation[1] == identity
+                and timestamp - self.last_observation[0] <= 0.05
+            )
+            self.last_observation = timestamp, identity
+            return point
+        self.last_observation = None
+        return None
 
     def heatmap(self, frames: deque[np.ndarray]) -> np.ndarray:
         if len(frames) != 3:
@@ -190,9 +226,9 @@ class BallModel:
 
     def detect(self, frames: deque[np.ndarray], timestamp: float, *, infer: bool = True) -> dict | None:
         if len(frames) < 3:
-            return self.tracker.update(frames[-1], timestamp, [])
+            return self.observe(frames[-1], timestamp, [])
         candidates = ball_candidates(self.heatmap(frames)) if infer else None
-        return self.tracker.update(frames[-1], timestamp, candidates)
+        return self.observe(frames[-1], timestamp, candidates)
 
 
 class BallObjectDetector:
@@ -230,25 +266,15 @@ class BallObjectDetector:
         return candidates
 
 
-class YoloBallModel:
+class YoloBallModel(BallModel):
     def __init__(self) -> None:
         self.detector = BallObjectDetector(MODELS / "ball_yolo.onnx", size=640)
         self.reset()
 
-    def reset(self) -> None:
-        self.tracker = BallTracker(allow_reacquisition=True)
-        self.motion = MotionBallDetector()
-
     def detect(self, frames: deque[np.ndarray], timestamp: float, *, infer: bool = True) -> dict | None:
         image = frames[-1]
         candidates = self.detector.candidates(image)
-        moving = self.motion.candidates(image)
-        for candidate in candidates:
-            candidate["motion_support"] = any(
-                np.hypot(candidate["x"] - other["x"], candidate["y"] - other["y"]) <= 8
-                for other in moving
-            )
-        point = self.tracker.update(image, timestamp, candidates)
+        point = self.observe(image, timestamp, candidates)
         if point is not None:
             point["detector_score"] = point["intensity"] / 255
             point["intensity"] = None

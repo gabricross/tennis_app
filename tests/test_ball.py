@@ -10,10 +10,10 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from inference import BallObjectDetector, BallTracker, ModelBank, YoloBallModel, ball_candidates
+from inference import BallModel, BallObjectDetector, BallTracker, ModelBank, YoloBallModel, ball_candidates
 from engine import draw_frame, summarize
 from court import LENGTH, WIDTH
-from ball_motion import MotionBallDetector
+from ball_motion import ActiveBallSelector, MotionBallDetector
 
 
 class BallTests(unittest.TestCase):
@@ -144,33 +144,60 @@ class MotionBallTests(unittest.TestCase):
 
 
 class YoloBallTests(unittest.TestCase):
-    def test_yolo_reacquires_stronger_ball_instead_of_locking_on_a_spare(self):
+    def moving_model(self, sequence):
         model = YoloBallModel.__new__(YoloBallModel)
         model.detector = Mock()
-        spare = {"x": 100, "y": 120, "intensity": 0.4 * 255}
-        active = {"x": 500, "y": 250, "intensity": 0.8 * 255}
-        model.detector.candidates.side_effect = [[spare.copy()], [spare.copy()], [spare.copy(), active]]
+        model.detector.candidates.side_effect = sequence
         model.reset()
+        model.motion = Mock()
+        model.motion.candidates.return_value = []
+        model.motion.affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        return model
+
+    def test_stationary_yolo_candidate_is_not_accepted_as_live_ball(self):
+        model = YoloBallModel.__new__(YoloBallModel)
+        model.detector = Mock()
+        model.detector.candidates.return_value = [{"x": 100, "y": 120, "intensity": 240}]
+        model.reset()
+        image = np.random.default_rng(42).integers(0, 150, (360, 640, 3), dtype=np.uint8)
+        frames = deque([image], maxlen=3)
+        points = [model.detect(frames, index / 30) for index in range(12)]
+        self.assertTrue(all(point is None for point in points))
+
+    def test_renderer_never_connects_different_ball_identities(self):
+        frame = np.zeros((720, 1280, 3), np.uint8)
+        sample = {"camera_valid": False, "players": [], "ball": None, "time": 0}
+        series = [
+            {"time": 0, "ball": {"x": 100, "y": 300, "track_id": 1, "continuous": False}},
+            {"time": 1 / 30, "ball": {"x": 300, "y": 300, "track_id": 2, "continuous": False}},
+        ]
+        draw_frame(frame, sample, sample, 0, [sample], 0, 1 / 30, ball_samples=series, frame_index=1)
+        np.testing.assert_array_equal(frame[300, 200], [0, 0, 0])
+
+    def test_yolo_reacquires_stronger_ball_instead_of_locking_on_a_spare(self):
+        spare = {"x": 100, "y": 120, "intensity": 0.4 * 255}
+        sequence = [[spare.copy()], [spare.copy()]] + [
+            [spare.copy(), {"x": x, "y": 250, "intensity": 0.8 * 255}] for x in (500, 510, 520)
+        ]
+        model = self.moving_model(sequence)
         frames = deque([np.zeros((360, 640, 3), np.uint8)], maxlen=3)
-        model.detect(frames, 0)
-        model.detect(frames, 1 / 30)
-        point = model.detect(frames, 2 / 30)
-        self.assertAlmostEqual(point["x"], 500)
+        for index in range(4):
+            self.assertIsNone(model.detect(frames, index / 30))
+        point = model.detect(frames, 4 / 30)
+        self.assertAlmostEqual(point["x"], 520)
         self.assertEqual(len(model.tracker.history), 1)
 
     def test_yolo_uses_continuity_to_break_near_equal_detector_scores(self):
-        model = YoloBallModel.__new__(YoloBallModel)
-        model.detector = Mock()
-        model.detector.candidates.side_effect = [
-            [{"x": 100, "y": 120, "intensity": 0.8 * 255}],
-            [{"x": 105, "y": 120, "intensity": 0.74 * 255},
-             {"x": 500, "y": 250, "intensity": 0.8 * 255}],
-        ]
-        model.reset()
+        sequence = [[{"x": x, "y": 120, "intensity": 0.74 * 255}] for x in (100, 110, 120)]
+        sequence.append([{"x": 130, "y": 120, "intensity": 0.74 * 255},
+                         {"x": 500, "y": 250, "intensity": 0.95 * 255}])
+        model = self.moving_model(sequence)
         frames = deque([np.zeros((360, 640, 3), np.uint8)], maxlen=3)
-        model.detect(frames, 0)
-        point = model.detect(frames, 1 / 30)
-        self.assertAlmostEqual(point["x"], 105)
+        for index in range(3):
+            model.detect(frames, index / 30)
+        point = model.detect(frames, 3 / 30)
+        self.assertAlmostEqual(point["x"], 130)
+        self.assertTrue(point["continuous"])
 
     def test_letterbox_rgb_decode_and_nms(self):
         detector = BallObjectDetector.__new__(BallObjectDetector)
@@ -187,21 +214,71 @@ class YoloBallTests(unittest.TestCase):
         np.testing.assert_allclose(tensor[0, :, 320, 320], np.array([30, 20, 10]) / 255, atol=1e-7)
 
     def test_yolo_runs_detector_on_every_frame_even_between_tracknet_slots(self):
-        model = YoloBallModel.__new__(YoloBallModel)
-        model.detector = Mock()
-        model.detector.candidates.return_value = [{"x": 100, "y": 120, "intensity": 0.8 * 255}]
-        model.reset()
+        model = self.moving_model([
+            [{"x": x, "y": 120, "intensity": 0.8 * 255}] for x in (100, 110, 120)
+        ])
         frames = deque([np.zeros((360, 640, 3), np.uint8)], maxlen=3)
         first = model.detect(frames, 0, infer=False)
         second = model.detect(frames, 1 / 30, infer=False)
-        self.assertEqual(model.detector.candidates.call_count, 2)
-        self.assertEqual(second["method"], "YOLOv8n + temporal association")
-        self.assertIsNone(first["intensity"])
-        self.assertAlmostEqual(first["detector_score"], 0.8)
+        third = model.detect(frames, 2 / 30, infer=False)
+        self.assertEqual(model.detector.candidates.call_count, 3)
+        self.assertIsNone(first)
+        self.assertIsNone(second)
+        self.assertEqual(third["method"], "YOLOv8n + temporal association")
+        self.assertIsNone(third["intensity"])
+        self.assertAlmostEqual(third["detector_score"], 0.8)
 
     def test_unknown_backend_is_not_silently_substituted(self):
         with self.assertRaises(ValueError):
             ModelBank().ball_detector("invented")
+
+
+class ActiveBallTests(unittest.TestCase):
+    def test_tracknet_also_requires_confirmed_motion(self):
+        model = BallModel.__new__(BallModel)
+        maps = []
+        for x in (100, 120, 140):
+            image = np.zeros((360, 640), np.uint8)
+            image[100:103, x:x + 3] = 220
+            maps.append(image)
+        model.heatmap = Mock(side_effect=maps)
+        model.reset()
+        model.motion = Mock()
+        model.motion.candidates.return_value = []
+        model.motion.affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        frames = deque(maxlen=3)
+        for index in range(9):
+            frames.append(np.zeros((360, 640, 3), np.uint8))
+            point = model.detect(frames, index / 30, infer=index % 3 == 2)
+            if index < 8:
+                self.assertIsNone(point)
+        self.assertIsNotNone(point)
+        self.assertEqual(model.heatmap.call_count, 3)
+        self.assertEqual(point["method"], "TrackNet + temporal association")
+        self.assertIn("track_id", point)
+
+    def test_camera_pan_does_not_confirm_a_stationary_spare(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 7], [0, 1, 3]])
+        for index in range(15):
+            point = selector.update([{"x": 100 + 7 * index, "y": 100 + 3 * index, "intensity": 250}],
+                                    index / 30, affine)
+            self.assertIsNone(point)
+
+    def test_camera_loss_requires_a_new_confirmation(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(3):
+            point = selector.update([{"x": 100 + 10 * index, "y": 100, "intensity": 220}],
+                                    index / 30, affine)
+        self.assertIsNotNone(point)
+        previous_id = point["track_id"]
+        self.assertIsNone(selector.update([{"x": 130, "y": 100, "intensity": 220}], .1, None))
+        for index in range(4, 6):
+            point = selector.update([{"x": 100 + 10 * index, "y": 100, "intensity": 220}],
+                                    index / 30, affine)
+        self.assertIsNotNone(point)
+        self.assertNotEqual(point["track_id"], previous_id)
 
 
 if __name__ == "__main__":

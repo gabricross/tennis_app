@@ -46,11 +46,18 @@ def main() -> None:
     parser.add_argument("--results", type=Path, default=HOME / "tracking_benchmark" / "results")
     parser.add_argument("--labels", type=Path, default=Path(__file__).with_name("tracking_labels.json"))
     parser.add_argument("--score-only", action="store_true", help="Score existing outputs without running another experiment.")
+    parser.add_argument("--ids", nargs="+", help="Score a specified subset of the reviewed recordings.")
     args = parser.parse_args()
     truth = json.loads(args.labels.read_text(encoding="utf-8"))
+    if args.ids and not set(args.ids).issubset(truth["labels"]):
+        raise ValueError("Unknown reviewed recording identifier.")
     report = {"note": truth["note"], "tolerance_model_pixels": truth["tolerance_model_pixels"], "clips": {}}
     if args.score_only:
         for identifier, labels in truth["labels"].items():
+            if args.ids and identifier not in args.ids:
+                continue
+            if args.ids and identifier not in args.ids:
+                continue
             path = args.results / identifier / "analysis.json"
             if not path.exists():
                 raise FileNotFoundError(path)

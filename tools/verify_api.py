@@ -110,6 +110,14 @@ def main():
     minimum_samples = 10 if SETTINGS.players_only else 20
     checked("real_samples_exported", status == 200 and len(analysis["samples"]) >= minimum_samples)
     checked("requested_mode_was_executed", analysis["config"]["mode"] == mode and all("ball" in s for s in analysis["samples"]))
+    checked("metric_geometry_is_versioned",
+            analysis["version"] == 3 and analysis["court_geometry"]["service_distance_from_net_m"] == 6.4)
+    checked("player_movement_is_exported",
+            all("movement" in analysis["summary"]["players"][side] for side in ("north", "south"))
+            and all("motion" in p for s in analysis["samples"] for p in s["players"]))
+    checked("ball_speed_is_explicitly_unavailable",
+            analysis["summary"]["ball_speed"]["available"] is False
+            and analysis["summary"]["ball_speed"]["speed_kmh"] is None)
     if not SETTINGS.players_only:
         checked("selected_ball_backend_persisted", analysis["config"]["ball_backend"] == SETTINGS.ball_backend)
         checked("one_ball_sample_per_output_frame",
@@ -118,11 +126,17 @@ def main():
         ball_status, ball_csv, _ = request("GET", f"/api/jobs/{job['id']}/files/ball.csv")
         checked("ball_csv_exports_methods_and_detector_scores",
                 ball_status == 200 and b"method,detector_score" in ball_csv)
+        checked("ball_observations_have_identity_and_continuity",
+                all("track_id" in s["ball"] and "continuous" in s["ball"]
+                    for s in analysis["ball_samples"] if s["ball"] is not None))
     status, first_bytes, headers = request(
         "GET", f"/api/jobs/{job['id']}/files/analysis.mp4", extra={"Range": "bytes=0-99"}
     )
     checked("video_range_and_seek_supported", status == 206 and len(first_bytes) == 100 and any(key.lower() == "content-range" for key in headers))
-    checked("csv_download_available", request("GET", f"/api/jobs/{job['id']}/files/observations.csv")[0] == 200)
+    csv_status, csv_data, _ = request("GET", f"/api/jobs/{job['id']}/files/observations.csv")
+    checked("csv_download_available", csv_status == 200)
+    checked("csv_includes_estimated_speed_and_observed_distance",
+            b"estimated_speed_kmh,observed_distance_m,motion_status" in csv_data)
     comparison_status, comparison, _ = request("GET", f"/api/jobs/{job['id']}/comparison")
     checked("comparison_page_available", comparison_status == 200 and b'Reproducir ambos' in comparison)
     status, archive, _ = request("GET", f"/api/jobs/{job['id']}/files/report.zip")

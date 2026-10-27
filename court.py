@@ -11,23 +11,25 @@ from scipy.optimize import least_squares
 from config import MODELS
 
 WIDTH, LENGTH = 10.97, 23.77
+SERVICE_NEAR_NET = 6.40
+SERVICE_TOP, SERVICE_BOTTOM = LENGTH / 2 - SERVICE_NEAR_NET, LENGTH / 2 + SERVICE_NEAR_NET
 PLAY_BOUNDS = (-4.0, -7.0, WIDTH + 4.0, LENGTH + 7.0)
 WORLD_CORNERS = np.array([[0, 0], [WIDTH, 0], [WIDTH, LENGTH], [0, LENGTH]], np.float32)
 CALIBRATION_REFERENCES = {
     "doubles": WORLD_CORNERS,
     "service_left": np.array(
-        [[1.37, 6.4], [WIDTH / 2, 6.4], [WIDTH / 2, 17.37], [1.37, 17.37]], np.float32
+        [[1.37, SERVICE_TOP], [WIDTH / 2, SERVICE_TOP], [WIDTH / 2, SERVICE_BOTTOM], [1.37, SERVICE_BOTTOM]], np.float32
     ),
     "service_right": np.array(
-        [[WIDTH / 2, 6.4], [9.60, 6.4], [9.60, 17.37], [WIDTH / 2, 17.37]], np.float32
+        [[WIDTH / 2, SERVICE_TOP], [9.60, SERVICE_TOP], [9.60, SERVICE_BOTTOM], [WIDTH / 2, SERVICE_BOTTOM]], np.float32
     ),
 }
 COURT_LINES = [
     [[0, 0], [WIDTH, 0]], [[0, LENGTH], [WIDTH, LENGTH]],
     [[0, 0], [0, LENGTH]], [[WIDTH, 0], [WIDTH, LENGTH]],
     [[1.37, 0], [1.37, LENGTH]], [[9.60, 0], [9.60, LENGTH]],
-    [[1.37, 6.4], [9.60, 6.4]], [[1.37, 17.37], [9.60, 17.37]],
-    [[WIDTH / 2, 6.4], [WIDTH / 2, 17.37]],
+    [[1.37, SERVICE_TOP], [9.60, SERVICE_TOP]], [[1.37, SERVICE_BOTTOM], [9.60, SERVICE_BOTTOM]],
+    [[WIDTH / 2, SERVICE_TOP], [WIDTH / 2, SERVICE_BOTTOM]],
 ]
 WORLD_LINE_SAMPLES = np.concatenate(
     [np.linspace(np.array(a), np.array(b), 32) for a, b in COURT_LINES]

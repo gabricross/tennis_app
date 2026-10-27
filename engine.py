@@ -19,6 +19,7 @@ from config import FPS
 from court import COURT_LINES, LENGTH, PLAY_BOUNDS, WIDTH, CourtCamera, court_matrix, project
 from inference import Detection, ModelBank, PlayerSelector
 from media import check_cancel, normalize
+from kinematics import BALL_SPEED, player_kinematics
 
 LOGGER = logging.getLogger("tennis.engine")
 COLORS = {"north": (210, 224, 92), "south": (111, 161, 255)}
@@ -91,7 +92,7 @@ def draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp
                *, ball_samples=None, frame_index=0) -> None:
     height, width = frame.shape[:2]
     layer = frame.copy()
-    valid = sample["camera_valid"] and following["camera_valid"]
+    valid = sample["camera_valid"] and following["camera_valid"] and following.get("camera_continuous", True)
     if valid:
         matrix = (1 - alpha) * np.array(sample["matrix"]) + alpha * np.array(following["matrix"])
         for line in COURT_LINES:
@@ -102,7 +103,7 @@ def draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp
     players = []
     for source_player in sample["players"]:
         player = dict(source_player)
-        if player["side"] in next_players:
+        if valid and player["side"] in next_players:
             for key in ("box", "pitch"):
                 player[key] = (
                     (1 - alpha) * np.array(player[key])
@@ -115,17 +116,33 @@ def draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp
         label = "ARRIBA" if player["side"] == "north" else "ABAJO"
         cv2.putText(frame, label, (x1, max(20, y1 - 9)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.47, color, 2, cv2.LINE_AA)
+        motion = player.get("motion") if valid else None
+        if motion:
+            speed = motion["speed_kmh"]
+            distance = motion["distance_m"]
+            detail = (f"{speed:.1f} km/h est." if speed is not None else "km/h --")
+            detail += f" | {distance:.1f} m obs." if distance is not None else " | m --"
+            cv2.putText(frame, detail, (max(0, min(x1, width - 260)), min(height - 35, y2 + 23)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.44, color, 1, cv2.LINE_AA)
         cv2.ellipse(frame, ((x1 + x2) // 2, y2), (11, 4), 0, 0, 360, color, 2)
     ball_series = samples if ball_samples is None else ball_samples
     ball_index = sample_index if ball_samples is None else frame_index
     point = ball_series[ball_index]["ball"]
     if point is not None:
-        history = [
-            (entry["time"], entry["ball"]) for entry in ball_series[max(0, ball_index - 6) : ball_index + 1]
-            if entry["ball"] is not None
-        ]
+        history = []
+        for entry in reversed(ball_series[max(0, ball_index - 6):ball_index + 1]):
+            observation = entry["ball"]
+            if observation is None or observation.get("track_id") != point.get("track_id"):
+                break
+            history.append((entry["time"], observation))
+            if not observation.get("continuous", False):
+                break
+        history.reverse()
         for left, right in zip(history, history[1:]):
-            if right[0] - left[0] <= 0.15 and np.hypot(right[1]["x"] - left[1]["x"], right[1]["y"] - left[1]["y"]) < width * 0.35:
+            dt = right[0] - left[0]
+            distance = np.hypot((right[1]["x"] - left[1]["x"]) * 640 / width,
+                                (right[1]["y"] - left[1]["y"]) * 360 / height)
+            if dt <= 0.05 and distance <= 12 + 1200 * dt:
                 cv2.line(frame, (round(left[1]["x"]), round(left[1]["y"])),
                          (round(right[1]["x"]), round(right[1]["y"])), (55, 240, 245), 2, cv2.LINE_AA)
         cv2.circle(frame, (round(point["x"]), round(point["y"])), 5, (55, 240, 245), 2)
@@ -156,6 +173,9 @@ def draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp
     state = "REGISTRO ACTIVO" if valid else "CAMARA NO VALIDA - MAPA OCULTO"
     label = f"TENNIS LAB  |  {timestamp:05.1f}s  |  {state}  |  ANALISIS LOCAL"
     cv2.putText(frame, label, (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (215, 235, 230), 1, cv2.LINE_AA)
+    if any("motion" in p for p in sample["players"]):
+        cv2.putText(frame, "PELOTA: km/h NO DISPONIBLES (sin 3D)", (12, height - 34),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (215, 235, 230), 1, cv2.LINE_AA)
 
 
 def summarize(samples: list[dict], mode: str, duration: float, elapsed: float,
@@ -204,7 +224,8 @@ def summarize(samples: list[dict], mode: str, duration: float, elapsed: float,
         "processing_seconds": elapsed, "mode": mode, "warnings": warnings,
         "metrics_note": "Cobertura = muestras observadas / muestras analizadas; pelota por fotograma, "
         "con el método de cada observación separado en JSON/CSV. No mide precisión. "
-        "Las zonas se calculan solo entre observaciones válidas. Sin velocidades, distancia física, marcador, botes ni decisiones arbitrales.",
+        "Las zonas se calculan solo entre observaciones válidas. Las métricas de movimiento, cuando existen, "
+        "son estimaciones del apoyo sobre el suelo, no mediciones certificadas. Sin velocidad de pelota, marcador, botes ni decisiones arbitrales.",
     }
 
 
@@ -239,6 +260,7 @@ def analyze_clip(
     samples = []
     ball_samples = [] if ball else None
     previous_boxes = [detection.box for detection in initial_detections]
+    camera_continuous = True
     for index in range(total):
         check_cancel(event)
         if index:
@@ -253,6 +275,7 @@ def analyze_clip(
         if index % stride and index != total - 1:
             state = camera.update(frame, previous_boxes)
             matrix = state.matrix
+            camera_continuous = camera_continuous and state.valid
             continue
         detections = initial_detections if index == 0 else people.detect(frame)
         if index == 0:
@@ -289,14 +312,26 @@ def analyze_clip(
         previous_boxes = [detection.box for detection in detections]
         samples.append({
             "time": round(timestamp, 6), "frame": index, "camera_valid": valid,
+            "camera_continuous": camera_continuous and valid,
             "camera_reason": reason, "line_support": support,
             "matrix": matrix.tolist() if valid else None, "players": selected, "ball": point,
         })
+        camera_continuous = valid
         progress(12 + 67 * (index + 1) / total,
                  "Analizando jugadores y pelota" if ball else "Analizando jugadores y cámara")
     capture.release()
     check_cancel(event)
+    movement = player_kinematics(samples)
     summary = summarize(samples, settings["mode"], total / FPS, time.perf_counter() - started, ball_samples)
+    for side, metrics in movement.items():
+        summary["players"][side]["movement"] = metrics
+    summary["ball_speed"] = BALL_SPEED.copy()
+    summary["warnings"].append(
+        "Velocidad y distancia de jugadores estimadas con apoyos y dimensiones de pista. "
+        "Se filtra el ruido y se excluyen huecos, saltos y calibraciones insuficientes; "
+        "la distancia observada no es el recorrido completo si falta seguimiento. "
+        "La velocidad de pelota no está disponible sin calibración 3D o mediciones adicionales."
+    )
     if reference != "doubles":
         summary["warnings"].insert(
             0, "Calibración parcial manual: la proyección fuera de las referencias visibles "
@@ -317,7 +352,8 @@ def analyze_clip(
     encode_result(original, directory / "analysis.mp4", samples, total, event, progress, credit_text, ball_samples)
     summary["total_seconds_including_render"] = time.perf_counter() - started
     result = {
-        "version": 2, "width": width, "height": height, "fps": FPS, "frames": total,
+        "version": 3, "width": width, "height": height, "fps": FPS, "frames": total,
+        "court_geometry": {"width_m": WIDTH, "length_m": LENGTH, "service_distance_from_net_m": 6.4},
         "config": settings, "summary": summary, "source_credit": source_credit,
         "source_notice": source_notice, "samples": samples, "ball_samples": ball_samples,
     }
@@ -326,17 +362,22 @@ def analyze_clip(
     )
     with (directory / "observations.csv").open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.writer(stream)
-        writer.writerow(["seconds", "player_side", "x_reference", "y_reference", "detector_score", "observed", "camera_valid"])
+        writer.writerow(["seconds", "player_side", "x_reference", "y_reference", "detector_score", "observed",
+                         "camera_valid", "estimated_speed_kmh", "observed_distance_m", "motion_status"])
         for sample in samples:
             for player in sample["players"]:
-                writer.writerow([sample["time"], player["side"], *player["pitch"], player["confidence"], True, sample["camera_valid"]])
+                motion = player["motion"]
+                writer.writerow([sample["time"], player["side"], *player["pitch"], player["confidence"], True,
+                                 sample["camera_valid"], motion["speed_kmh"], motion["distance_m"], motion["status"]])
     if ball:
         with (directory / "ball.csv").open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.writer(stream)
-            writer.writerow(["seconds", "x_image_pixels", "y_image_pixels", "intensity_class", "observed", "method", "detector_score"])
+            writer.writerow(["seconds", "x_image_pixels", "y_image_pixels", "intensity_class", "observed", "method",
+                             "detector_score", "track_id", "continuous", "speed_kmh"])
             for sample in ball_samples if ball_samples is not None else []:
                 point = sample["ball"]
                 if point is not None:
                     writer.writerow([sample["time"], point["x"], point["y"], point["intensity"],
-                                     True, point["method"], point.get("detector_score")])
+                                     True, point["method"], point.get("detector_score"), point["track_id"],
+                                     point["continuous"], None])
     return summary
