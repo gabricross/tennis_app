@@ -1,0 +1,44 @@
+{
+  "davis03": {
+    "corners": null,
+    "assessment": "Dobles, toma lateral y referencias recortadas. No compatible con el selector de un jugador por mitad."
+  },
+  "davis06": {
+    "corners": null,
+    "assessment": "Dobles, paneo entre mitades de pista. No se asignan identidades ni coordenadas con una calibracion inventada."
+  },
+  "rola": {
+    "corners": null,
+    "assessment": "Primer plano lateral de un jugador, con rotulos y pista incompleta. Solo se evalua pelota en imagen."
+  },
+  "young": {
+    "corners": null,
+    "assessment": "Interior, toma baja y jugadores que tapan las referencias. No hay cuatro intersecciones de suelo revisables."
+  },
+  "rally": {
+    "corners": null,
+    "assessment": "Toma oblicua lateral, referencias del extremo derecho fuera del fotograma. Pelota evaluable; proyeccion no validada."
+  },
+  "aerial": {
+    "corners": null,
+    "assessment": "Dron vertical sobre superficie con lineas no distinguibles. No se confunde el limite de color con lineas reglamentarias."
+  },
+  "girls": {
+    "corners": null,
+    "assessment": "Toma baja desde el fondo: esquina izquierda recortada y referencias interiores muy pequenas. Proyeccion no validada."
+  },
+  "clay": {
+    "corners": null,
+    "assessment": "Dron cenital con red vertical en imagen, lineas desgastadas y varios extremos fuera de plano. Angulo no compatible con la calibracion actual."
+  },
+  "audience": {
+    "reference": "service_left",
+    "corners": [[0.28984375, 0.5097222222], [0.4375, 0.5097222222], [0.5234375, 0.6694444444], [0.24296875, 0.6791666667]],
+    "assessment": "Toma desde el fondo sobre tierra batida. Cuatro intersecciones interiores revisadas manualmente en el segundo 2; extrapolacion parcial."
+  },
+  "night": {
+    "reference": "service_left",
+    "corners": [[0.36953125, 0.6236111111], [0.61328125, 0.6194444444], [0.6578125, 0.7972222222], [0.16484375, 0.7986111111]],
+    "assessment": "Toma nocturna movil de camara, con calibracion parcial manual revisada en el segundo 5. No se conoce el dispositivo de grabacion."
+  }
+}

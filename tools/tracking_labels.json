@@ -1,0 +1,17 @@
+{
+  "note": "Small independent visual review, before examining prediction overlays. Coordinates in a resized 640x360 frame, not world coordinates. Null means ambiguous/unscorable, NOT absent. Live ball only; do not label stationary spare balls as the active ball. This is not a certified ground-truth dataset.",
+  "frames": [15, 45, 75, 105],
+  "tolerance_model_pixels": 8,
+  "labels": {
+    "night": [[514, 148], null, [296, 285], [590, 5]],
+    "young": [null, [315, 81], [348, 129], [429, 299]],
+    "girls": [[261, 248], [270, 194], [255, 231], [245, 207]],
+    "rally": [null, null, [26, 124], null],
+    "rola": [[500, 233], null, null, [149, 179]],
+    "davis03": [null, null, null, null],
+    "davis06": [null, null, [390, 252], null],
+    "aerial": [null, null, null, null],
+    "clay": [null, null, null, null],
+    "audience": [[362, 253], null, null, null]
+  }
+}

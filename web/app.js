@@ -213,6 +213,7 @@
     $("#input-notice").textContent = clip.metadata.input_notice || "";
     $("#confirm-court").checked = false;
     $("#calibration-reference").value = previous?.calibration_reference ?? "doubles";
+    $("#ball-backend").value = previous?.ball_backend ?? (state.config.models.ball ? "tracknet" : "yolo");
     referenceGuide();
     screen("studio");
     stage("configure");
@@ -344,6 +345,13 @@
       ready = false;
       message = "Falta el modelo de jugadores. Ejecuta Preparar_Tennis_Lab.ps1.";
     }
+    if (state.config && $("#complete-mode").checked) {
+      const key = $("#ball-backend").value === "yolo" ? "ball_yolo" : "ball";
+      if (!state.config.models[key]) {
+        ready = false;
+        message = "No está instalado el motor de pelota seleccionado. Elige otro o instala sus pesos.";
+      }
+    }
     $("#analysis-readiness").textContent = message;
     $("#start-analysis").disabled = !ready;
     $("#calibration-status").textContent = ready ? "Confirmada" : "Revisar";
@@ -360,6 +368,7 @@
       body: JSON.stringify({
         clip_id: state.clip.id, ...selected, mode, corners: state.points,
         calibration_reference: $("#calibration-reference").value,
+        ball_backend: $("#ball-backend").value,
       }),
     });
     state.job = job;
@@ -460,6 +469,12 @@
       link.download = `tennis-lab-${job.id.slice(0, 8)}-${file}`;
       $("#export-links").append(link);
     }
+    if (summary.mode === "complete") {
+      const link = element("a", "Pelota CSV ↓");
+      link.href = asset("ball.csv");
+      link.download = `tennis-lab-${job.id.slice(0, 8)}-ball.csv`;
+      $("#export-links").append(link);
+    }
     updateResult();
   }
   const worldPoint = ([x, y]) => [98 + x * 27.7, 166 + y * 27.7];
@@ -525,11 +540,12 @@
     for (const [row, key, label, color] of [[0, "north", "ARRIBA", "#70dfd2"], [1, "south", "ABAJO", "#ffa16f"], [2, "ball", "PELOTA", "#d9fa73"]]) {
       context.font = "14px Segoe UI"; context.fillStyle = "#a2b7ba"; context.fillText(label, 0, row * 35 + 20);
       context.fillStyle = "#2c4249"; context.fillRect(80, row * 35 + 4, 1120, 23);
-      for (let index = 0; index < samples.length; index++) {
-        const entry = samples[index];
+      const series = key === "ball" ? (state.result.ball_samples ?? samples) : samples;
+      for (let index = 0; index < series.length; index++) {
+        const entry = series[index];
         const observed = key === "ball" ? entry.ball !== null : entry.players.some((player) => player.side === key);
         if (!observed) continue;
-        const end = samples[index + 1]?.time ?? duration;
+        const end = series[index + 1]?.time ?? duration;
         context.fillStyle = color;
         context.fillRect(80 + entry.time / duration * 1120, row * 35 + 4, Math.max(1, (end - entry.time) / duration * 1120), 23);
       }
@@ -677,10 +693,15 @@
     $("#engine-status").textContent = state.config.models.people ? "Motor de jugadores preparado" : "Faltan modelos: ejecuta la preparación";
     $("#storage-path").textContent = state.config.storage;
     $("#use-previous").hidden = !state.config.previous_demo_available;
-    $("#complete-mode").disabled = !state.config.models.ball;
+    $("#complete-mode").disabled = !state.config.models.ball && !state.config.models.ball_yolo;
+    $("#ball-backend option[value=tracknet]").disabled = !state.config.models.ball;
+    $("#ball-backend option[value=yolo]").disabled = !state.config.models.ball_yolo;
+    $("#ball-backend").value = state.config.models.ball ? "tracknet" : "yolo";
+    $("#ball-backend").addEventListener("change", updateReadiness);
+    $$("input[name=analysis-mode]").forEach((input) => input.addEventListener("change", updateReadiness));
     $("#auto-court").disabled = !state.config.models.court;
     $("#model-list").replaceChildren();
-    for (const [key, label] of [["people", "YOLOX-S · Personas"], ["court", "ResNet50 · Propuesta de pista"], ["ball", "TrackNet · Pelota experimental"]]) {
+    for (const [key, label] of [["people", "YOLOX-S · Personas"], ["court", "ResNet50 · Propuesta de pista"], ["ball", "TrackNet · Pelota experimental"], ["ball_yolo", "YOLOv8n tenis · Pelota ligera experimental"]]) {
       $("#model-list").append(element("li", `${label}: ${state.config.models[key] ? "instalado" : "no disponible"}`));
     }
     await refreshLibrary();

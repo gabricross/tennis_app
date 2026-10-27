@@ -50,6 +50,10 @@ def main() -> None:
         page.wait_for_function("() => document.querySelector('#calibration-image').naturalWidth>0")
         checks["file_uploaded_from_ui"] = True
         page.get_by_label("Duración del análisis", exact=True).fill("2")
+        if not settings.players_only:
+            page.locator("#ball-backend").select_option(settings.ball_backend)
+            page.locator("#complete-mode").check()
+            checks["ball_backend_selected_in_ui"] = True
         if settings.start:
             page.get_by_label("Inicio, en segundos", exact=True).fill(str(settings.start))
             page.get_by_role("button", name="Actualizar fotograma", exact=True).click()
@@ -99,6 +103,11 @@ def main() -> None:
             raise AssertionError("Changing the start must invalidate the frame confirmation.")
         page.get_by_label("Inicio, en segundos", exact=True).fill(str(settings.start))
         checks["changed_start_requires_matching_frame"] = True
+        page.set_viewport_size({"width": 390, "height": 844})
+        if page.evaluate("()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1"):
+            raise AssertionError("The configured ball selector has horizontal overflow on mobile.")
+        checks["mobile_configuration_no_overflow"] = True
+        page.set_viewport_size({"width": 1440, "height": 1000})
         page.screenshot(path=str(PRIVATE / "app_calibration.png"), full_page=True)
         with page.expect_response(lambda response: response.url.endswith("/api/jobs") and response.request.method == "POST") as started:
             page.get_by_role("button", name="Analizar mi fragmento", exact=False).click()
@@ -106,6 +115,10 @@ def main() -> None:
         if job["config"]["calibration_reference"] != settings.reference:
             raise AssertionError("The API did not preserve the selected calibration reference.")
         checks["calibration_reference_persisted"] = True
+        if not settings.players_only:
+            if job["config"]["ball_backend"] != settings.ball_backend or job["config"]["mode"] != "complete":
+                raise AssertionError("The UI did not submit the selected ball backend.")
+            checks["ball_backend_persisted"] = True
         page.locator("#progress-stage").wait_for(state="visible")
         checks["real_progress_visible"] = True
         page.locator("#results-stage").wait_for(state="visible", timeout=180000)
@@ -160,16 +173,34 @@ def main() -> None:
         )
         if drift > 0.25 or comparison.locator("#error").is_visible():
             raise AssertionError("The comparison videos did not play together.")
+        if not settings.players_only:
+            if not comparison.locator("#ball-card").is_visible():
+                raise AssertionError("The comparison must show per-frame ball coverage.")
+            if not comparison.locator("#ball-csv").get_attribute("href").endswith("/ball.csv"):
+                raise AssertionError("The comparison must expose the actual ball export.")
+            checks["comparison_exposes_ball_coverage_and_csv"] = True
+        comparison.set_viewport_size({"width": 390, "height": 844})
+        if comparison.evaluate("()=>document.documentElement.scrollWidth>document.documentElement.clientWidth+1"):
+            raise AssertionError("The comparison has horizontal overflow on mobile.")
+        checks["mobile_comparison_no_overflow"] = True
         comparison.close()
         checks["side_by_side_comparison_actually_plays"] = True
         with page.expect_download() as downloaded:
-            page.get_by_role("link", name="CSV", exact=False).click()
+            page.locator('#export-links a[href$="/observations.csv"]').click()
         download = downloaded.value
         destination = PRIVATE / "ui_download.csv"
         download.save_as(destination)
         if "player_side" not in destination.read_text(encoding="utf-8-sig"):
             raise AssertionError("The downloaded CSV is not the real observation export.")
         checks["download_contains_real_csv"] = True
+        if not settings.players_only:
+            with page.expect_download() as downloaded:
+                page.locator('#export-links a[href$="/ball.csv"]').click()
+            destination = PRIVATE / "ui_ball_download.csv"
+            downloaded.value.save_as(destination)
+            if "detector_score" not in destination.read_text(encoding="utf-8-sig"):
+                raise AssertionError("The ball CSV must contain the actual detector output fields.")
+            checks["ball_download_contains_real_csv"] = True
         page.get_by_role("button", name="Posiciones", exact=True).click()
         page.evaluate("() => window.scrollTo(0,0)")
         page.screenshot(path=str(PRIVATE / "app_results.png"), full_page=True)

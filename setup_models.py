@@ -30,6 +30,15 @@ ASSETS = {
     },
 }
 PEOPLE_SHA = "c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063"
+BALL_YOLO = {
+    "repo": "RJTPP/tennis-ball-detection",
+    "revision": "83ec86c8e7c42505b4a19ea7f345aa1dfb971b77",
+    "file": "best.onnx",
+    "sha256": "0020f0356923712947d223fcbbe053748ee862f5642c963041a6dc67ca8f910d",
+    "model_card_license": "Apache-2.0",
+    "embedded_model_license": "AGPL-3.0",
+    "notice": "Conflicting license declarations; review upstream rights before commercial redistribution.",
+}
 PEOPLE_URL = (
     "https://media.githubusercontent.com/media/opencv/opencv_zoo/"
     "48b10fa505aeb51fbd127fc60a5c660040e823b7/models/object_detection_yolox/"
@@ -129,7 +138,19 @@ def main() -> None:
     parser.add_argument("--convert", choices=("court", "ball"))
     parser.add_argument("--download-only", action="store_true")
     parser.add_argument("--players-only", action="store_true", help="Download only the Apache-2.0 person model.")
+    parser.add_argument("--ball-yolo", action="store_true", help="Download optional experimental tennis-ball YOLO ONNX.")
     arguments = parser.parse_args()
+    if arguments.ball_yolo:
+        if arguments.convert or arguments.players_only or arguments.download_only:
+            parser.error("--ball-yolo must be used on its own.")
+        base = f"https://huggingface.co/{BALL_YOLO['repo']}/resolve/{BALL_YOLO['revision']}/"
+        download(base + BALL_YOLO["file"], MODELS / "ball_yolo.onnx", BALL_YOLO["sha256"])
+        cards = MODELS / "model_cards"
+        cards.mkdir(exist_ok=True)
+        download(base + "README.md", cards / "ball-yolo.md")
+        (cards / "ball-yolo-provenance.json").write_text(json.dumps(BALL_YOLO, indent=2), encoding="utf-8")
+        LOGGER.warning(BALL_YOLO["notice"])
+        return
     if arguments.convert and arguments.players_only:
         parser.error("--players-only cannot be combined with --convert.")
     if arguments.convert:

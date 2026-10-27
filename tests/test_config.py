@@ -34,6 +34,43 @@ class ConfigurationTests(unittest.TestCase):
             )
             self.assertEqual(result.stdout.strip(), "detection")
 
+    def test_selected_missing_ball_model_never_falls_back_to_another_backend(self):
+        code = """
+from unittest.mock import Mock, patch
+from fastapi import HTTPException
+import app
+from config import MODELS
+
+values = dict(clip_id="fixture", start=0, duration=1, mode="complete",
+              corners=[[0.1,0.1],[0.9,0.1],[0.9,0.9],[0.1,0.9]])
+(MODELS / "people.onnx").touch()
+manager = Mock()
+with patch.object(app, "require_clip", return_value={"metadata":{"duration":2}}), patch.object(app, "manager", manager):
+    for selected, available in [("yolo","ball.onnx"), ("tracknet","ball_yolo.onnx")]:
+        for path in MODELS.glob("ball*.onnx"):
+            path.unlink()
+        (MODELS / available).touch()
+        request = app.AnalysisRequest(**values, **({"ball_backend":selected} if selected=="yolo" else {}))
+        assert request.ball_backend == selected
+        try:
+            app.start_job(request)
+        except HTTPException as error:
+            assert error.status_code == 503
+            assert "seleccionado" in error.detail
+        else:
+            raise AssertionError("A different installed ball model must not be used silently.")
+    manager.submit.assert_not_called()
+    request = app.AnalysisRequest(**{**values, "mode":"players"})
+    app.start_job(request)
+    manager.submit.assert_called_once()
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            subprocess.run(
+                [sys.executable, "-c", code], cwd=ROOT,
+                env=dict(os.environ, TENNISLAB_HOME=temporary),
+                capture_output=True, text=True, check=True,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,7 +15,7 @@
     button,a.button{border:0;border-radius:6px;padding:12px 18px;background:#d9fa73;color:#17261b;font:600 13px "Segoe UI",sans-serif;cursor:pointer;text-decoration:none}
     button:disabled{opacity:.5;cursor:wait}button.secondary{background:#30474d;color:#edf5ed}
     button:focus-visible,a:focus-visible{outline:3px solid #72e1d1;outline-offset:4px}
-    .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:26px 0}
+    .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:26px 0}
     .metrics div{background:#172d32;border:1px solid #355054;padding:20px;border-radius:8px}
     .metrics strong{display:block;font-size:36px;color:#d9fa73}.metrics span{font-size:12px;color:#bed0d1}
     .notice{border-left:3px solid #ffad78;background:#322f27;padding:15px 22px;font-size:13px}
@@ -44,13 +44,14 @@
     <div><strong id="camera">—</strong><span>Muestras con registro de cámara válido</span></div>
     <div><strong id="south">—</strong><span>Muestras con observación del jugador de abajo</span></div>
     <div><strong id="north">—</strong><span>Muestras con observación del jugador de arriba</span></div>
+    <div id="ball-card" hidden><strong id="ball">—</strong><span id="ball-label">Fotogramas con candidato de pelota</span></div>
   </div>
   <section class="notice">
     <p><strong>Cobertura no es precisión.</strong> Los huecos no se rellenan con posiciones inventadas. Ambos vídeos corresponden exactamente al mismo intervalo y no tienen audio.</p>
     <ul id="warnings"></ul>
     <p id="metrics-note"></p>
   </section>
-  <div class="controls"><a id="download" class="button" download>Guardar vídeo analizado</a><a id="csv" download>Observaciones CSV</a><a id="json" download>Registro JSON</a><a href="/">Volver a Tennis Lab</a></div>
+  <div class="controls"><a id="download" class="button" download>Guardar vídeo analizado</a><a id="csv" download>Observaciones CSV</a><a id="ball-csv" download hidden>Pelota CSV</a><a id="json" download>Registro JSON</a><a href="/">Volver a Tennis Lab</a></div>
   <footer><p id="credit">Fuente: grabación aportada por el usuario.</p><p>Procesamiento local con Tennis Lab. Ninguna grabación se envía a terceros desde esta página.</p></footer>
   <script>
     "use strict";
@@ -83,6 +84,12 @@
       duration=summary.duration;
       document.querySelector("#description").textContent=`${duration.toFixed(1)} s, desde el segundo ${result.config.start.toFixed(1)} de la grabación. ${summary.mode==="complete"?"Incluye candidatos de pelota experimentales.":"Modo jugadores: este resultado no incluye seguimiento de pelota."}`;
       for(const [id,value] of [["camera",summary.camera_coverage],["north",summary.players.north.coverage],["south",summary.players.south.coverage]])document.querySelector("#"+id).textContent=`${Math.round(value*100)} %`;
+      if(summary.mode==="complete"&&typeof summary.ball_coverage==="number"){
+        document.querySelector("#ball-card").hidden=false;
+        document.querySelector("#ball").textContent=`${Math.round(summary.ball_coverage*100)} %`;
+        if(!Array.isArray(result.ball_samples))document.querySelector("#ball-label").textContent="Muestras con candidato de pelota (análisis antiguo)";
+        const ballCsv=document.querySelector("#ball-csv");ballCsv.href=base+"ball.csv";ballCsv.hidden=false;
+      }
       for(const warning of summary.warnings){const item=document.createElement("li");item.textContent=warning;document.querySelector("#warnings").append(item);}
       document.querySelector("#metrics-note").textContent=summary.metrics_note;
       original.src=base+"original.mp4";analysis.src=base+"analysis.mp4";

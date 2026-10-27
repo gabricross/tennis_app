@@ -11,6 +11,7 @@ from scipy.optimize import least_squares
 from config import MODELS
 
 WIDTH, LENGTH = 10.97, 23.77
+PLAY_BOUNDS = (-4.0, -7.0, WIDTH + 4.0, LENGTH + 7.0)
 WORLD_CORNERS = np.array([[0, 0], [WIDTH, 0], [WIDTH, LENGTH], [0, LENGTH]], np.float32)
 CALIBRATION_REFERENCES = {
     "doubles": WORLD_CORNERS,
@@ -178,7 +179,7 @@ class CourtCamera:
         self.orb = cv2.ORB_create(nfeatures=1800, edgeThreshold=15, fastThreshold=10)
         self.reference_keypoints, self.reference_descriptors = self.orb.detectAndCompute(
             self.gray, self._static_mask(self.gray.shape, boxes if boxes is not None else [])
-        ) if allow_partial else ([], None)
+        )
 
     def _gray(self, image):
         return cv2.cvtColor(cv2.resize(image, None, fx=self.scale, fy=self.scale), cv2.COLOR_BGR2GRAY)
@@ -237,7 +238,7 @@ class CourtCamera:
             return unavailable
         scale = np.diag([self.scale, self.scale, 1])
         candidate = np.linalg.inv(scale) @ motion @ scale @ self.reference_matrix
-        support = line_support(image, candidate, 7, allow_partial=True)
+        support = line_support(image, candidate, 7, allow_partial=self.allow_partial)
         if support < max(0.3, self.initial_support * 0.55):
             return CameraState(self.matrix, False, "Reencuadre rechazado: líneas no alineadas", support)
         self.matrix = candidate
@@ -249,9 +250,7 @@ class CourtCamera:
 
     def update(self, image, boxes) -> CameraState:
         if self.lost:
-            if self.allow_partial:
-                return self._recover(image, boxes)
-            return CameraState(self.matrix, False, "Cambio de plano o registro perdido", 0)
+            return self._recover(image, boxes)
         gray = self._gray(image)
         if self.features is None or len(self.features) < 12:
             self.lost = True
@@ -263,42 +262,32 @@ class CourtCamera:
             self.lost = True
             return CameraState(self.matrix, False, "Flujo óptico no disponible", 0)
         good = status.ravel() == 1
-        if self.allow_partial:
-            backward, backward_status, _ = cv2.calcOpticalFlowPyrLK(
-                gray, self.gray, points, None, winSize=(25, 25), maxLevel=3
-            )
-            if backward is None or backward_status is None:
-                self.lost = True
-                return CameraState(self.matrix, False, "No se puede verificar el flujo inverso", 0)
-            backward_error = np.linalg.norm(self.features - backward, axis=2).ravel()
-            good &= (backward_status.ravel() == 1) & (backward_error < 1.5)
+        backward, backward_status, _ = cv2.calcOpticalFlowPyrLK(
+            gray, self.gray, points, None, winSize=(25, 25), maxLevel=3
+        )
+        if backward is None or backward_status is None:
+            self.lost = True
+            return CameraState(self.matrix, False, "No se puede verificar el flujo inverso", 0)
+        backward_error = np.linalg.norm(self.features - backward, axis=2).ravel()
+        good &= (backward_status.ravel() == 1) & (backward_error < 1.5)
         old, new = self.features[good].reshape(-1, 2), points[good].reshape(-1, 2)
         if len(old) < 12:
             self.lost = True
             return CameraState(self.matrix, False, "Se han perdido las referencias de la pista", 0)
-        if self.allow_partial:
-            motion, accepted = cv2.findHomography(old, new, cv2.RANSAC, 2, confidence=0.995)
-        else:
-            affine, accepted = cv2.estimateAffinePartial2D(
-                old, new, method=cv2.RANSAC, ransacReprojThreshold=2
-            )
-            motion = np.vstack([affine, [0, 0, 1]]) if affine is not None else None
+        motion, accepted = cv2.findHomography(old, new, cv2.RANSAC, 2, confidence=0.995)
         if motion is None or accepted is None or np.mean(accepted) < 0.55:
             self.lost = True
             return CameraState(self.matrix, False, "El movimiento no supera los controles geométricos", 0)
         displacement = np.median(np.linalg.norm(old - new, axis=1))
-        if self.allow_partial:
-            inliers = old[accepted.ravel() == 1]
-            if len(inliers) < 12 or cv2.contourArea(cv2.convexHull(inliers)) < gray.size * 0.002:
-                self.lost = True
-                return CameraState(self.matrix, False, "Referencias estáticas demasiado concentradas", 0)
-            height, width = gray.shape
-            viewport = np.array([[0, 0], [width, 0], [width, height], [0, height]], np.float32)
-            transformed = project(viewport, motion).astype(np.float32)
-            area_ratio = abs(cv2.contourArea(transformed)) / gray.size
-            scale_valid = cv2.isContourConvex(transformed) and 0.65 < area_ratio < 1.55
-        else:
-            scale_valid = 0.85 < np.linalg.det(motion[:2, :2]) < 1.18
+        inliers = old[accepted.ravel() == 1]
+        if len(inliers) < 12 or cv2.contourArea(cv2.convexHull(inliers)) < gray.size * 0.002:
+            self.lost = True
+            return CameraState(self.matrix, False, "Referencias estáticas demasiado concentradas", 0)
+        height, width = gray.shape
+        viewport = np.array([[0, 0], [width, 0], [width, height], [0, height]], np.float32)
+        transformed = project(viewport, motion).astype(np.float32)
+        area_ratio = abs(cv2.contourArea(transformed)) / gray.size
+        scale_valid = cv2.isContourConvex(transformed) and 0.65 < area_ratio < 1.55
         if displacement > 90 or not scale_valid:
             self.lost = True
             return CameraState(self.matrix, False, "Corte o zoom demasiado grande", 0)

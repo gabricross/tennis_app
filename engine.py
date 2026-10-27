@@ -16,7 +16,7 @@ import imageio_ffmpeg
 import numpy as np
 
 from config import FPS
-from court import COURT_LINES, LENGTH, WIDTH, CourtCamera, court_matrix, project
+from court import COURT_LINES, LENGTH, PLAY_BOUNDS, WIDTH, CourtCamera, court_matrix, project
 from inference import Detection, ModelBank, PlayerSelector
 from media import check_cancel, normalize
 
@@ -27,6 +27,7 @@ COLORS = {"north": (210, 224, 92), "south": (111, 161, 255)}
 def encode_result(
     source: Path, destination: Path, samples: list[dict], frames: int,
     event: threading.Event, progress: Callable[[float, str], None], credit: str,
+    ball_samples: list[dict] | None = None,
 ) -> None:
     capture = cv2.VideoCapture(str(source))
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -56,7 +57,8 @@ def encode_result(
                 following = samples[min(sample_index + 1, len(samples) - 1)]
                 span = following["time"] - sample["time"]
                 alpha = (timestamp - sample["time"]) / span if span else 0
-                draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp)
+                draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp,
+                           ball_samples=ball_samples, frame_index=index)
                 if credit:
                     cv2.rectangle(frame, (0, height - 23), (width, height), (16, 29, 32), -1)
                     cv2.putText(frame, credit[:165], (9, height - 7),
@@ -85,7 +87,8 @@ def encode_result(
         raise RuntimeError("No se ha podido completar el MP4: " + error_path.read_text(errors="replace")[-500:])
 
 
-def draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp) -> None:
+def draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp,
+               *, ball_samples=None, frame_index=0) -> None:
     height, width = frame.shape[:2]
     layer = frame.copy()
     valid = sample["camera_valid"] and following["camera_valid"]
@@ -113,39 +116,40 @@ def draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp
         cv2.putText(frame, label, (x1, max(20, y1 - 9)),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.47, color, 2, cv2.LINE_AA)
         cv2.ellipse(frame, ((x1 + x2) // 2, y2), (11, 4), 0, 0, 360, color, 2)
-    if sample["ball"] is not None:
+    ball_series = samples if ball_samples is None else ball_samples
+    ball_index = sample_index if ball_samples is None else frame_index
+    point = ball_series[ball_index]["ball"]
+    if point is not None:
         history = [
-            (entry["time"], entry["ball"]) for entry in samples[max(0, sample_index - 6) : sample_index + 1]
+            (entry["time"], entry["ball"]) for entry in ball_series[max(0, ball_index - 6) : ball_index + 1]
             if entry["ball"] is not None
         ]
         for left, right in zip(history, history[1:]):
             if right[0] - left[0] <= 0.15 and np.hypot(right[1]["x"] - left[1]["x"], right[1]["y"] - left[1]["y"]) < width * 0.35:
                 cv2.line(frame, (round(left[1]["x"]), round(left[1]["y"])),
                          (round(right[1]["x"]), round(right[1]["y"])), (55, 240, 245), 2, cv2.LINE_AA)
-        point = sample["ball"]
         cv2.circle(frame, (round(point["x"]), round(point["y"])), 5, (55, 240, 245), 2)
-    map_width = max(92, round(width * 0.105))
-    map_height = round(map_width * LENGTH / WIDTH)
+    map_width = max(112, round(width * 0.13))
+    left, top, right, bottom = PLAY_BOUNDS
+    map_scale = map_width / (right - left)
+    map_height = round((bottom - top) * map_scale)
     x, y = width - map_width - 22, 57
+    def map_point(position):
+        return (x + round((position[0] - left) * map_scale),
+                y + round((position[1] - top) * map_scale))
     overlay = frame.copy()
     cv2.rectangle(overlay, (x - 10, y - 30), (x + map_width + 10, y + map_height + 31), (23, 43, 43), -1)
     cv2.addWeighted(overlay, 0.8, frame, 0.2, 0, frame)
     ink = (125, 161, 150)
-    cv2.rectangle(frame, (x, y), (x + map_width, y + map_height), ink, 1)
-    cv2.line(frame, (x, y + map_height // 2), (x + map_width, y + map_height // 2), ink, 1)
-    for offset in (1.37, 9.60):
-        xx = x + round(offset / WIDTH * map_width)
-        cv2.line(frame, (xx, y), (xx, y + map_height), ink, 1)
-    for offset in (6.4, 17.37):
-        yy = y + round(offset / LENGTH * map_height)
-        cv2.line(frame, (x + round(1.37 / WIDTH * map_width), yy),
-                 (x + round(9.60 / WIDTH * map_width), yy), ink, 1)
+    cv2.rectangle(frame, map_point((0, 0)), map_point((WIDTH, LENGTH)), ink, 1)
+    for line in COURT_LINES:
+        cv2.line(frame, map_point(line[0]), map_point(line[1]), ink, 1)
+    cv2.line(frame, map_point((0, LENGTH / 2)), map_point((WIDTH, LENGTH / 2)), ink, 1)
     if valid:
         for player in players:
             px, py = player["pitch"]
-            if 0 <= px <= WIDTH and 0 <= py <= LENGTH:
-                cv2.circle(frame, (x + round(px / WIDTH * map_width), y + round(py / LENGTH * map_height)),
-                           4, COLORS[player["side"]], -1, cv2.LINE_AA)
+            if left <= px <= right and top <= py <= bottom:
+                cv2.circle(frame, map_point((px, py)), 4, COLORS[player["side"]], -1, cv2.LINE_AA)
     cv2.putText(frame, "PISTA" if valid else "SIN REGISTRO", (x - 1, y - 10),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (215, 235, 230), 1, cv2.LINE_AA)
     cv2.rectangle(frame, (0, 0), (width, 34), (16, 29, 32), -1)
@@ -154,7 +158,8 @@ def draw_frame(frame, sample, following, alpha, samples, sample_index, timestamp
     cv2.putText(frame, label, (12, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (215, 235, 230), 1, cv2.LINE_AA)
 
 
-def summarize(samples: list[dict], mode: str, duration: float, elapsed: float) -> dict:
+def summarize(samples: list[dict], mode: str, duration: float, elapsed: float,
+              ball_samples: list[dict] | None = None) -> dict:
     total = len(samples)
     camera_coverage = sum(s["camera_valid"] for s in samples) / total
     players = {}
@@ -177,8 +182,10 @@ def summarize(samples: list[dict], mode: str, duration: float, elapsed: float) -
             warnings.append(f"Seguimiento incompleto del jugador {'de arriba' if side == 'north' else 'de abajo'} ({coverage:.0%} de muestras).")
     if camera_coverage < 0.9:
         warnings.append("Se ha perdido la calibración durante parte del clip. No se proyectan esas posiciones.")
-    ball_observations = sum(sample["ball"] is not None for sample in samples)
-    if mode == "complete" and ball_observations / total < 0.5:
+    ball_series = samples if ball_samples is None else ball_samples
+    ball_observations = sum(sample["ball"] is not None for sample in ball_series)
+    ball_total = len(ball_series)
+    if mode == "complete" and ball_observations / ball_total < 0.5:
         warnings.append("Pelota experimental: detecciones escasas o intermitentes. No interpretes la estela como una trayectoria completa.")
     if mode == "complete":
         warnings.append("La pelota se representa en píxeles de imagen, no en 3D ni como bote sobre la pista.")
@@ -187,9 +194,16 @@ def summarize(samples: list[dict], mode: str, duration: float, elapsed: float) -
     return {
         "duration": duration, "samples": total, "camera_coverage": camera_coverage,
         "players": players, "ball_observations": ball_observations,
-        "ball_coverage": ball_observations / total if mode == "complete" else None,
+        "ball_samples": ball_total if mode == "complete" else 0,
+        "ball_coverage": ball_observations / ball_total if mode == "complete" else None,
+        "ball_methods": {
+            method: sum(s["ball"] is not None and s["ball"].get("method") == method for s in ball_series)
+            for method in ("TrackNet + temporal association", "bidirectional optical flow",
+                           "YOLOv8n + temporal association")
+        } if mode == "complete" else {},
         "processing_seconds": elapsed, "mode": mode, "warnings": warnings,
-        "metrics_note": "Cobertura = muestras observadas / muestras analizadas. No mide precisión. "
+        "metrics_note": "Cobertura = muestras observadas / muestras analizadas; pelota por fotograma, "
+        "con el método de cada observación separado en JSON/CSV. No mide precisión. "
         "Las zonas se calculan solo entre observaciones válidas. Sin velocidades, distancia física, marcador, botes ni decisiones arbitrales.",
     }
 
@@ -218,10 +232,12 @@ def analyze_clip(
         frame, matrix, allow_partial=reference != "doubles",
         boxes=[detection.box for detection in initial_detections],
     )
-    ball = models.ball_detector() if settings["mode"] == "complete" else None
+    ball_backend = settings.get("ball_backend", "tracknet")
+    ball = models.ball_detector(ball_backend) if settings["mode"] == "complete" else None
     frames = deque(maxlen=3)
     stride = 3 if ball else 6
     samples = []
+    ball_samples = [] if ball else None
     previous_boxes = [detection.box for detection in initial_detections]
     for index in range(total):
         check_cancel(event)
@@ -230,12 +246,14 @@ def analyze_clip(
             if not success:
                 raise RuntimeError("El vídeo normalizado se interrumpió durante el análisis.")
         frames.append(frame.copy())
-        if index % stride and index != total - 1:
-            if reference != "doubles":
-                state = camera.update(frame, previous_boxes)
-                matrix = state.matrix
-            continue
         timestamp = index / FPS
+        point = ball.detect(frames, timestamp, infer=index % 3 == 2) if ball else None
+        if ball_samples is not None:
+            ball_samples.append({"time": round(timestamp, 6), "frame": index, "ball": point})
+        if index % stride and index != total - 1:
+            state = camera.update(frame, previous_boxes)
+            matrix = state.matrix
+            continue
         detections = initial_detections if index == 0 else people.detect(frame)
         if index == 0:
             valid, reason, support = True, "Calibración confirmada por el usuario", camera.initial_support
@@ -269,7 +287,6 @@ def analyze_clip(
                 ])
         selected = selector.select(detections, matrix, timestamp) if valid else []
         previous_boxes = [detection.box for detection in detections]
-        point = ball.detect(frames, timestamp) if ball else None
         samples.append({
             "time": round(timestamp, 6), "frame": index, "camera_valid": valid,
             "camera_reason": reason, "line_support": support,
@@ -279,7 +296,7 @@ def analyze_clip(
                  "Analizando jugadores y pelota" if ball else "Analizando jugadores y cámara")
     capture.release()
     check_cancel(event)
-    summary = summarize(samples, settings["mode"], total / FPS, time.perf_counter() - started)
+    summary = summarize(samples, settings["mode"], total / FPS, time.perf_counter() - started, ball_samples)
     if reference != "doubles":
         summary["warnings"].insert(
             0, "Calibración parcial manual: la proyección fuera de las referencias visibles "
@@ -287,16 +304,22 @@ def analyze_clip(
         )
     if source_notice:
         summary["warnings"].insert(0, source_notice)
+    if ball is not None:
+        summary["ball_backend"] = ball_backend
+        summary["warnings"].append(
+            "La pelota es un candidato visual experimental, no una identidad garantizada; "
+            "puede confundirse con pelotas de reserva y otros objetos."
+        )
     credit_text = ""
     if source_credit:
         provider = source_credit.get("provider", "Wikimedia Commons")
         credit_text = f"Source: {source_credit['author']} | {provider} | {source_credit['license']} | cropped, normalized, analysis overlays"
-    encode_result(original, directory / "analysis.mp4", samples, total, event, progress, credit_text)
+    encode_result(original, directory / "analysis.mp4", samples, total, event, progress, credit_text, ball_samples)
     summary["total_seconds_including_render"] = time.perf_counter() - started
     result = {
-        "version": 1, "width": width, "height": height, "fps": FPS, "frames": total,
+        "version": 2, "width": width, "height": height, "fps": FPS, "frames": total,
         "config": settings, "summary": summary, "source_credit": source_credit,
-        "source_notice": source_notice, "samples": samples,
+        "source_notice": source_notice, "samples": samples, "ball_samples": ball_samples,
     }
     (directory / "analysis.json").write_text(
         json.dumps(result, ensure_ascii=False, allow_nan=False), encoding="utf-8"
@@ -310,9 +333,10 @@ def analyze_clip(
     if ball:
         with (directory / "ball.csv").open("w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.writer(stream)
-            writer.writerow(["seconds", "x_image_pixels", "y_image_pixels", "intensity_class", "observed"])
-            for sample in samples:
+            writer.writerow(["seconds", "x_image_pixels", "y_image_pixels", "intensity_class", "observed", "method", "detector_score"])
+            for sample in ball_samples if ball_samples is not None else []:
                 point = sample["ball"]
                 if point is not None:
-                    writer.writerow([sample["time"], point["x"], point["y"], point["intensity"], True])
+                    writer.writerow([sample["time"], point["x"], point["y"], point["intensity"],
+                                     True, point["method"], point.get("detector_score")])
     return summary

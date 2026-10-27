@@ -27,6 +27,7 @@ class VerificationConfig:
     output: Path
     players_only: bool
     reference: str
+    ball_backend: str
 
 
 def parse_arguments() -> VerificationConfig:
@@ -36,6 +37,7 @@ def parse_arguments() -> VerificationConfig:
     parser.add_argument("--start", type=float, default=0)
     parser.add_argument("--players-only", action="store_true", help="Validate a light installation without court or ball models.")
     parser.add_argument("--calibration-reference", choices=("doubles", "service_left", "service_right"), default="doubles")
+    parser.add_argument("--ball-backend", choices=("tracknet", "yolo"), default="tracknet")
     parser.add_argument("--corners", type=float, nargs=8, metavar="XY",
                         help="Four normalized outer corners, clockwise from the far-left corner.")
     arguments = parser.parse_args()
@@ -59,5 +61,5 @@ def parse_arguments() -> VerificationConfig:
     return VerificationConfig(
         arguments.video.resolve(), f"http://{parsed.hostname}:{port}", parsed.hostname,
         port, corners, arguments.start, HOME / "verification", arguments.players_only,
-        arguments.calibration_reference,
+        arguments.calibration_reference, arguments.ball_backend,
     )

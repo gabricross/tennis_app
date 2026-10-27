@@ -93,6 +93,18 @@ class CourtTests(unittest.TestCase):
         state = camera.update(unrelated, [])
         self.assertFalse(state.valid)
 
+    def test_full_court_camera_can_recover_verified_original_scene(self):
+        rng = np.random.default_rng(92)
+        image = rng.integers(0, 256, (360, 640, 3), dtype=np.uint8)
+        matrix = court_matrix(QUAD, (640, 360))
+        camera = CourtCamera(image, matrix)
+        camera.lost = True
+        state = camera.update(image, [])
+        self.assertTrue(state.valid, state.reason)
+        np.testing.assert_allclose(
+            project(WORLD_CORNERS, state.matrix), project(WORLD_CORNERS, matrix), atol=1,
+        )
+
     def test_partial_reference_round_trip_uses_service_coordinates(self):
         for reference in ("service_left", "service_right"):
             with self.subTest(reference=reference):

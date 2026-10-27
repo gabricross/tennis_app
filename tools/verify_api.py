@@ -82,8 +82,10 @@ def main():
     base = {
         "clip_id": clip["id"], "start": SETTINGS.start, "duration": 2, "mode": mode,
         "corners": QUAD, "calibration_reference": SETTINGS.reference,
+        "ball_backend": SETTINGS.ball_backend,
     }
     checked("invalid_corner_order_rejected", request("POST", "/api/jobs", {**base, "corners": [QUAD[0], QUAD[2], QUAD[1], QUAD[3]]})[0] == 422)
+    checked("invalid_ball_backend_rejected", request("POST", "/api/jobs", {**base, "ball_backend": "invented"})[0] == 422)
     checked("out_of_range_fragment_rejected", request("POST", "/api/jobs", {
         **base, "start": clip["metadata"]["duration"], "duration": 10,
     })[0] == 422)
@@ -108,6 +110,14 @@ def main():
     minimum_samples = 10 if SETTINGS.players_only else 20
     checked("real_samples_exported", status == 200 and len(analysis["samples"]) >= minimum_samples)
     checked("requested_mode_was_executed", analysis["config"]["mode"] == mode and all("ball" in s for s in analysis["samples"]))
+    if not SETTINGS.players_only:
+        checked("selected_ball_backend_persisted", analysis["config"]["ball_backend"] == SETTINGS.ball_backend)
+        checked("one_ball_sample_per_output_frame",
+                len(analysis["ball_samples"]) == analysis["frames"]
+                and [s["frame"] for s in analysis["ball_samples"]] == list(range(analysis["frames"])))
+        ball_status, ball_csv, _ = request("GET", f"/api/jobs/{job['id']}/files/ball.csv")
+        checked("ball_csv_exports_methods_and_detector_scores",
+                ball_status == 200 and b"method,detector_score" in ball_csv)
     status, first_bytes, headers = request(
         "GET", f"/api/jobs/{job['id']}/files/analysis.mp4", extra={"Range": "bytes=0-99"}
     )
