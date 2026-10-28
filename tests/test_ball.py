@@ -264,6 +264,22 @@ class YoloBallTests(unittest.TestCase):
 
 
 class ActiveBallTests(unittest.TestCase):
+    def test_old_outlier_does_not_hide_a_new_coherent_arc(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        positions = [
+            (100, 110), (100, 85), (102, 85), (104, 85.5), (106, 86), None,
+            (110, 89), (112, 91), (114, 94), (116, 97), (118, 101),
+        ]
+        for index, position in enumerate(positions):
+            candidates = [] if position is None else [
+                {"x": position[0], "y": position[1], "intensity": 220},
+            ]
+            point = selector.update(candidates, index / 30, affine)
+        self.assertIsNotNone(point)
+        self.assertAlmostEqual(point["x"], 118)
+        self.assertAlmostEqual(point["y"], 101)
+
     def test_tracknet_also_requires_confirmed_motion(self):
         model = BallModel.__new__(BallModel)
         maps = []

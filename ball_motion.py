@@ -115,9 +115,10 @@ class ActiveBallSelector:
                 self.tracks.append(track)
             position = np.array([candidate["x"], candidate["y"]], np.float64)
             track.points.append((timestamp, position))
-            if len(track.points) < 3 or timestamp - track.points[0][0] < 0.06:
+            motion_points = track.points[-5:]
+            if len(motion_points) < 3 or timestamp - motion_points[0][0] < 0.06:
                 continue
-            positions = np.array([point for _, point in track.points])
+            positions = np.array([point for _, point in motion_points])
             displacement = float(np.linalg.norm(positions[-1] - positions[0]))
             steps = np.linalg.norm(np.diff(positions, axis=0), axis=1)
             travel = float(steps.sum())

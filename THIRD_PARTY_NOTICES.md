@@ -66,7 +66,7 @@ como recortados, normalizados, sin audio y con overlays anadidos.
 La galeria enlaza cada fuente y su licencia; no se publican videos
 ni fotogramas en Git.
 
-Las dos grabaciones de iPhone usadas para evaluacion local proceden de
+Las grabaciones de iPhone usadas para evaluacion local proceden de
 [CalTennis](https://huggingface.co/datasets/demalenk/caltennis), revision
 `4af17dd4d398aad4116a35b5a74de4388658d356`.
 Autores: Ilona Demler, Xinran Xie, Blake Werner, Anna Szczuka y Pietro
@@ -77,6 +77,26 @@ comerciales, con atribucion en los resultados. No se usan para entrenar
 pesos distribuibles ni se incluyen videos, fotogramas o etiquetas
 derivadas del dataset en este repositorio. La licencia del articulo no
 sustituye la del material audiovisual.
+
+## Referencia fisica externa: CMU Panoptic Studio
+
+- Fuente oficial: [CMU Panoptic Studio](http://domedb.perception.cs.cmu.edu/)
+  y [Panoptic Toolbox](https://github.com/CMU-Perceptual-Computing-Lab/panoptic-toolbox).
+- Condiciones declaradas por sus autores: disponible solo para
+  **uso no comercial e investigacion**. No se interpreta el acceso
+  publico como permiso comercial ni se eluden registros de otros datasets.
+- Credito: Hanbyul Joo et al., *Panoptic Studio: A Massively Multiview
+  System for Social Motion Capture*, ICCV 2015; y *Panoptic Studio:
+  A Massively Multiview System for Social Interaction Capture*, TPAMI 2017.
+- Evaluacion local: `171204_pose1`, camara HD `00_02`, 600 fotogramas
+  desde el 9300, con calibracion y `hdPose3d_stage1_coco19`.
+  La referencia 3D es multivista triangulada, no una medida certificada
+  con marcadores ni una grabacion de tenis.
+- No se distribuyen videos, articulaciones 3D, fotogramas o informes
+  derivados en Git, ni se entrenan pesos con estos datos.
+  Los hashes de procedencia y resultados detallados se conservan
+  en el almacenamiento privado; el repositorio contiene solo la
+  herramienta propia y resultados agregados con sus limites.
 
 FFmpeg se obtiene mediante `imageio-ffmpeg`; NumPy, OpenCV, ONNX Runtime, SciPy,
 Pillow, FastAPI, Uvicorn y las herramientas opcionales mantienen sus propias

@@ -158,6 +158,10 @@ Todos los modos de pelota exigen una identidad con al menos tres
 observaciones y movimiento coherente, compensando la camara. Un candidato
 estatico fuerte no basta. Se rechazan desplazamientos compatibles con
 ruido estacionario; perder el registro obliga a confirmar otra vez.
+La coherencia usa las cinco observaciones mas recientes para que un
+candidato antiguo incorrecto no bloquee un arco nuevo. La ventana se
+expresa en observaciones, no en fotogramas, para preservar la cadencia
+de TrackNet, que infiere cada tres fotogramas.
 Las posiciones con tres candidatos casi inmoviles durante al menos
 0,06 s se recuerdan durante hasta 5 s sin nueva evidencia, compensando la
 camara. Las coincidencias a 3 pixeles del modelo se excluyen antes de
@@ -227,7 +231,7 @@ Por eso no se utiliza el 7/8 como prueba de fiabilidad general.
 Se reprodujo la transferencia incorrecta de identidad, se corrigio
 el productor y se comprobaron de nuevo las secuencias problematicas.
 
-#### Resultados de los dos recorridos completos corregidos
+#### Resultados historicos de los dos recorridos completos corregidos
 
 Se ejecutaron los dos intervalos completos con **YOLO multiescala y la
 memoria estatica final**, a traves de la cola y del exportador reales:
@@ -290,6 +294,56 @@ de reserva y separacion por grabaciones/sesiones con derechos adecuados.
 No se promete deteccion perfecta, especialmente con oclusiones o pelotas
 de pocos pixeles.
 
+#### Nueva iteracion: continuidad y sesiones separadas
+
+Se reprodujo un hueco real de B105: no lo causaba la memoria de reservas,
+sino un candidato antiguo incorrecto que contaminaba la coherencia de
+toda la historia. Una regresion sintetica fallo antes del cambio y pasa
+con las cinco observaciones recientes. No se modifican pesos, confianza,
+escalas ni memoria estatica.
+
+El replay completo de las mismas medidas neuronales, contrastando SHA-256
+de cada una de las 4048 imagenes, pasa de **6/8 a 7/8** posiciones manuales
+localizadas, sin posiciones incorrectas en esa muestra. Sigue faltando
+el primer fotograma por confirmacion de movimiento. A pasa de 222 a 250
+observaciones y B de 1220 a 1252. Se conservan el rechazo de la reserva
+fija de A y los mismos ocho cruces reales cerca de la reserva de B.
+Los diez clips historicos mantienen 11/15 correctas, 0 incorrectas y
+4 huecos. **Es replay, no una nueva medicion de inferencia o rendimiento.**
+
+Ademas, se fijaron etiquetas antes de inferir tres recortes de 20 s de
+sesiones diferentes de las dos anteriores. Se comparan los selectores
+publicado y nuevo con las mismas imagenes y candidatos:
+
+| Sesion nueva | Posiciones visibles | Correctas antes | Correctas ahora | Incorrectas ahora | Huecos ahora |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Enero 23, lateral | 9 | 5 | 8 | 0 | 1 |
+| Septiembre 18, fondo | 5 | 0 | 0 | 1 | 4 |
+| Enero 28, tarde | 6 | 2 | 2 | 0 | 4 |
+| Total | 20 | 7 | 10 | 1 | 9 |
+
+El umbral de localizacion es 8 px en coordenadas 640 x 360. Las etiquetas
+pertenecen a cinco vuelos: no son veinte situaciones independientes ni
+una medida de precision general. Un control de 196 fotogramas de pista
+vacia no emite posiciones; solo cuatro fotogramas tienen ausencia
+verificada manualmente. Los ambiguos no se cuentan como negativos.
+
+La confusion de septiembre con la zona de la raqueta ya existia antes
+del cambio. Algunas pelotas reales no llegan al umbral neuronal de 0,15.
+Un experimento posterior completo a 1280 y confianza 0,03 recupera 3/5,
+pero conserva una posicion incorrecta en otro fotograma: **no se activa
+esa politica solo por aumentar cobertura**. Estas sesiones son ya
+material de diagnostico si se ajusta el detector; hace falta otro
+holdout para evaluar cualquier ajuste posterior.
+
+Una nueva exportacion de 6 s por la cola real confirma B105 con metodo
+YOLO, score de detector y sin intensidad TrackNet. No sustituye a los
+MP4 largos historicos. La iteracion pasa **89 pruebas unitarias,
+49 comprobaciones API y 36 de navegador**; ambos videos de la nueva
+comparacion se reproducen sincronizados. Los datos y caches siguen
+fuera de Git. Persisten errores de deteccion: no se afirma seguimiento
+perfecto ni se hace fine-tuning con esta muestra insuficiente.
+
 ### Metros y km/h de jugadores (JSON version 3)
 
 La pista usa 23,77 x 10,97 m. **Las lineas de saque estan a 6,40 m de la
@@ -329,6 +383,73 @@ Por decision explicita del usuario, **no se calcula velocidad de pelota**.
 la explicacion. La homografia del suelo no mide su vuelo; se necesita
 calibracion 3D o mediciones adicionales. El CSV de pelota deja esa
 columna vacia y conserva `track_id` y `continuous` para auditar la estela.
+
+#### Contraste externo con referencia 3D
+
+Se obtuvo del servidor oficial de [CMU Panoptic Studio](http://domedb.perception.cs.cmu.edu/)
+video sincronizado, calibracion y poses 3D multivista de
+`171204_pose1`: camara `00_02`, persona 2, fotogramas 9300-9899.
+Son 600 fotogramas, 20,02 s a 30000/1001 fps. El intervalo se eligio
+por movimiento y confianza 3D antes de ejecutar nuestro detector.
+Las unidades son centimetros,
+[confirmados por un autor](https://github.com/CMU-Perceptual-Computing-Lab/panoptic-toolbox/issues/18#issuecomment-490623523).
+Se usa el plano X,Z con suelo Y=0 cm, declarado como supuesto
+configurable, y se corrige la distorsion con K y distCoef publicados.
+La reproyeccion de articulaciones se reviso sobre cuatro fotogramas.
+
+[La herramienta de contraste](tools/benchmark_player_reference.py)
+reutiliza `ModelBank.person_detector()` y `player_kinematics`, sin
+duplicar su configuracion de produccion. Compara los mismos intervalos,
+ventanas de velocidad y retraso de la mediana. Separa el filtro
+alimentado por posiciones 3D de la estimacion a partir de cajas:
+
+| Indicador, cajas frente a centro de tobillos 3D | Resultado |
+| --- | --- |
+| Detecciones unicas / muestras | 183/200; 17 sin persona, 0 ambiguas |
+| Error mediano / percentil 95 de posicion | 0,245 / 0,417 m |
+| Intervalos fisicos comunes evaluables | 15,816 s |
+| Distancia estimada / referencia en esos intervalos | 2,938 / 2,484 m |
+| Diferencia de distancia | +0,455 m; +18,3 % |
+| Error absoluto medio de velocidad | 0,953 km/h, sobre 46 ventanas emitidas |
+
+Tambien se informa la comparacion con el centro corporal, que no es el
+mismo punto fisico que los tobillos. El filtro alimentado directamente
+por referencia recorre 2,061 m frente a 2,948 m de polilinea de referencia
+en 19,720 s: la zona muerta conservadora pierde movimiento lento y
+pequeno. No se reduce a ciegas para mejorar una cifra, porque tambien
+protege del ruido de las cajas.
+
+La referencia de distancia es la polilinea de centros de tobillos 3D
+muestreada aproximadamente a 10 Hz y con mediana de tres observaciones,
+sin la zona muerta de produccion. Las velocidades se comparan solo
+donde el motor emite una estimacion. Un hueco de deteccion no se rellena
+ni se suma como recorrido; cobertura de cajas y segundos evaluables
+son indicadores distintos.
+
+**Esto es una comprobacion fisica fuera del dominio del tenis**, con
+referencia triangulada, no MOCAP certificado por sensores. No valida
+la calibracion de una pista propia, identidades con varias personas
+ni la precision de metros/km/h durante un partido. No se presenta
+CalTennis como verdad metrica: su evaluacion original es label-free.
+
+Ejemplo con los archivos locales, que no se distribuyen en el repositorio:
+
+```powershell
+$reference = "$env:LOCALAPPDATA\TennisLab\metric_reference"
+& "$env:LOCALAPPDATA\TennisLab\.venv\Scripts\python.exe" .\tools\benchmark_player_reference.py `
+  --video "$reference\panoptic_00_02_f9300_600.mp4" `
+  --calibration "$reference\full_calibration_171204_pose1.json" `
+  --poses "$reference\full_hdPose3d_stage1_coco19.tar" `
+  --camera 00_02 --body-id 2 --start-frame 9300 --frames 600 `
+  --output "$reference\player_reference_comparison.json"
+```
+
+La herramienta no descarga datos: requiere un recorte cuyo primer
+fotograma corresponda exactamente a `--start-frame`, conservando los
+fps nativos. Registra SHA-256 de video, calibracion, poses y modelo;
+las comparaciones sin referencia suficiente son `null`, no errores
+cero. Mantener videos, poses, fotogramas e informes derivados fuera
+de Git y respetar las condiciones no comerciales del dataset.
 
 ### Que clip funciona mejor
 
