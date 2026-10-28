@@ -44,15 +44,30 @@ def main() -> None:
             )
         response = uploaded.value
         if response.status != 201:
-            raise AssertionError(response.text())
-        clip = response.json()
+            raise AssertionError(f"Upload failed: HTTP {response.status}")
         page.locator("#configure-stage").wait_for(state="visible")
         page.wait_for_function("() => document.querySelector('#calibration-image').naturalWidth>0")
+        library = page.request.get(base_url + "/api/library").json()
+        clip = next((item for item in library["clips"] if item["name"] == name), None)
+        if clip is None:
+            raise AssertionError("The uploaded clip is missing from the library.")
         checks["file_uploaded_from_ui"] = True
+        if settings.players_only:
+            page.locator("#players-mode").check()
+        if not settings.players_only:
+            if not page.locator("#complete-mode").is_checked():
+                raise AssertionError("A new clip must default to all three analysis layers.")
+            if "PISTA + JUGADORES + PELOTA" not in page.locator("#analysis-plan").inner_text():
+                raise AssertionError("The complete analysis must explicitly include all three layers.")
+            checks["combined_analysis_is_explicit_default"] = True
+            page.locator("#players-mode").check()
+            if page.locator("#ball-options").is_visible() or "NO está incluida" not in page.locator("#analysis-plan").inner_text():
+                raise AssertionError("Players-only mode must explicitly exclude the ball.")
+            checks["players_only_mode_is_explicit"] = True
         page.get_by_label("Duración del análisis", exact=True).fill("2")
         if not settings.players_only:
-            page.locator("#ball-backend").select_option(settings.ball_backend)
             page.locator("#complete-mode").check()
+            page.locator("#ball-backend").select_option(settings.ball_backend)
             checks["ball_backend_selected_in_ui"] = True
         if settings.start:
             page.get_by_label("Inicio, en segundos", exact=True).fill(str(settings.start))
@@ -74,7 +89,7 @@ def main() -> None:
             page.get_by_role("button", name="Proponer pista con IA", exact=True).click()
             page.wait_for_function("() => document.querySelectorAll('#corner-fields .corner-row').length===4")
             checks["court_model_is_connected_to_ui"] = True
-        if page.get_by_role("button", name="Analizar mi fragmento", exact=False).is_enabled():
+        if page.locator("#start-analysis").is_enabled():
             raise AssertionError("The analysis must require explicit court review.")
         checks["explicit_court_confirmation_required"] = True
         page.get_by_role("button", name="Volver a marcar", exact=True).click()
@@ -82,24 +97,29 @@ def main() -> None:
         for x, y in QUAD:
             bounds = canvas.bounding_box()
             canvas.click(position={"x": x * bounds["width"], "y": y * bounds["height"]})
-        page.get_by_label("He revisado las cuatro esquinas", exact=False).check()
-        if not page.get_by_role("button", name="Analizar mi fragmento", exact=False).is_enabled():
+        page.locator("#confirm-court").check()
+        if not page.locator("#start-analysis").is_enabled():
             raise AssertionError("A reviewed manual calibration should enable analysis.")
         checks["manual_corners_work"] = True
+        if "NO mide precisión" not in page.locator("#calibration-quality").inner_text():
+            raise AssertionError("Calibration support must not be presented as accuracy.")
+        if page.locator("#reference-diagram").evaluate("(canvas)=>canvas.width") != 260:
+            raise AssertionError("The numbered reference diagram is missing.")
+        checks["complete_court_projection_reviewed"] = True
         if settings.reference != "doubles":
             page.get_by_label("Referencias visibles para calibrar", exact=True).select_option("doubles")
             if page.locator("#corner-fields .corner-row").count() != 0 or page.locator("#confirm-court").is_checked():
                 raise AssertionError("Changing reference must clear the old points and review.")
-            if page.get_by_role("button", name="Analizar mi fragmento", exact=False).is_enabled():
+            if page.locator("#start-analysis").is_enabled():
                 raise AssertionError("Old coordinates must not enable a different reference.")
             page.get_by_label("Referencias visibles para calibrar", exact=True).select_option(settings.reference)
             for x, y in QUAD:
                 bounds = canvas.bounding_box()
                 canvas.click(position={"x": x * bounds["width"], "y": y * bounds["height"]})
-            page.get_by_label("He revisado las cuatro esquinas", exact=False).check()
+            page.locator("#confirm-court").check()
             checks["changing_reference_invalidates_old_points"] = True
         page.get_by_label("Inicio, en segundos", exact=True).fill(str(settings.start + 1))
-        if page.get_by_role("button", name="Analizar mi fragmento", exact=False).is_enabled():
+        if page.locator("#start-analysis").is_enabled():
             raise AssertionError("Changing the start must invalidate the frame confirmation.")
         page.get_by_label("Inicio, en segundos", exact=True).fill(str(settings.start))
         checks["changed_start_requires_matching_frame"] = True
@@ -110,7 +130,7 @@ def main() -> None:
         page.set_viewport_size({"width": 1440, "height": 1000})
         page.screenshot(path=str(PRIVATE / "app_calibration.png"), full_page=True)
         with page.expect_response(lambda response: response.url.endswith("/api/jobs") and response.request.method == "POST") as started:
-            page.get_by_role("button", name="Analizar mi fragmento", exact=False).click()
+            page.locator("#start-analysis").click()
         job = started.value.json()
         if job["config"]["calibration_reference"] != settings.reference:
             raise AssertionError("The API did not preserve the selected calibration reference.")
@@ -223,8 +243,8 @@ def main() -> None:
             card = page.locator(".library-card").filter(has_text=name)
             card.get_by_role("button", name="Analizar de nuevo", exact=True).click()
             page.wait_for_function("()=>document.querySelectorAll('#corner-fields .corner-row').length===4")
-            page.get_by_label("He revisado las cuatro esquinas", exact=False).check()
-            page.get_by_role("button", name="Analizar mi fragmento", exact=False).click()
+            page.locator("#confirm-court").check()
+            page.locator("#start-analysis").click()
             page.locator("#progress-stage").wait_for(state="visible")
             page.get_by_role("button", name="Cancelar análisis", exact=True).click()
             page.get_by_role("heading", name="Análisis cancelado.", exact=True).wait_for(timeout=30000)

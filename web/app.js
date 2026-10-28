@@ -8,7 +8,7 @@
     screen: "studio", stage: "upload", points: [], confirmedFrame: null,
     previewSerial: 0, dragging: -1, xhr: null, mapMode: "positions",
     resultView: "analysis", polling: false, densityCache: new Map(),
-    expandedClips: new Set(),
+    expandedClips: new Set(), calibration: null, calibrationKey: "", calibrationError: "",
   };
   const names = ["Arriba izquierda", "Arriba derecha", "Abajo derecha", "Abajo izquierda"];
   const statusNames = {
@@ -207,13 +207,15 @@
     state.clip = clip;
     state.points = [];
     $("#clip-start").value = previous?.start ?? 0;
-    $("#clip-duration").value = previous?.duration ?? Math.min(10, clip.metadata.duration);
+    $("#clip-duration").value = previous?.duration ?? Math.min(30, clip.metadata.duration);
     $("#clip-description").textContent = `${clip.name} · ${seconds(clip.metadata.duration)} · ${clip.metadata.width} × ${clip.metadata.height}`;
     $("#input-notice").hidden = !clip.metadata.input_notice;
     $("#input-notice").textContent = clip.metadata.input_notice || "";
     $("#confirm-court").checked = false;
     $("#calibration-reference").value = previous?.calibration_reference ?? "doubles";
-    $("#ball-backend").value = previous?.ball_backend ?? (state.config.models.ball ? "tracknet" : "yolo");
+    $("#ball-backend").value = previous?.ball_backend ?? (state.config.models.ball_yolo ? "yolo_multiscale" : "tracknet");
+    $("#players-mode").checked = previous?.mode === "players" || (previous?.mode !== "complete" && $("#complete-mode").disabled);
+    $("#complete-mode").checked = !$("#players-mode").checked;
     referenceGuide();
     screen("studio");
     stage("configure");
@@ -229,15 +231,43 @@
       $("#calibration-image").alt = "Marca las cuatro esquinas exteriores de dobles visibles.";
       $("#reference-title").textContent = "Las líneas exteriores, no las de individuales.";
       $("#reference-help").textContent = "Marca las cuatro esquinas de dobles que realmente se ven.";
-      return;
+    } else if (reference === "service_boxes") {
+      $("#calibration-image").alt = "Marca los cuatro extremos del rectángulo de saque completo, a ambos lados de la red.";
+      $("#reference-title").textContent = "Todo el rectángulo de saque, NO los fondos.";
+      $("#reference-help").textContent = "Marca las dos intersecciones de cada línea de saque con los laterales de individuales: "
+        + "dos puntos lejanos y dos cercanos, incluyendo ambas columnas. NO marques la cinta de la red. "
+        + "Es una referencia más amplia que una sola columna, pero los fondos siguen siendo una extrapolación.";
+    } else {
+      const side = reference === "service_left" ? "izquierda" : "derecha";
+      $("#calibration-image").alt = `Marca las cuatro intersecciones visibles de la columna ${side} de cuadros de saque, no la red.`;
+      $("#reference-title").textContent = `Solo la columna ${side} de saque, NO toda la pista.`;
+      $("#reference-help").textContent = "El rectángulo verde NO es el contorno del campo. Marca las intersecciones de la línea de saque lejana y la cercana "
+        + `con la línea central y el lateral de individuales de la ${side}. `
+        + "Son los cuatro extremos de un rectángulo que cruza la red; NO marques la cinta de la red. "
+        + "El resto de la pista se extrapola: revisa también las líneas turquesas. Si no encajan, cambia los puntos o la toma.";
     }
-    const side = reference === "service_left" ? "izquierda" : "derecha";
-    $("#calibration-image").alt = `Marca las cuatro intersecciones visibles de la columna ${side} de cuadros de saque, no la red.`;
-    $("#reference-title").textContent = `La columna ${side} de cuadros de saque.`;
-    $("#reference-help").textContent = "Marca las intersecciones de la línea de saque lejana y la cercana "
-      + `con la línea central y el lateral de individuales de la ${side}. `
-      + "Son los cuatro extremos de un rectángulo que cruza la red; NO marques la cinta de la red. "
-      + "El minimapa fuera de ese rectángulo será una extrapolación.";
+    const court = state.config.court;
+    const canvas = $("#reference-diagram"), context = canvas.getContext("2d");
+    const xy = ([x, y]) => [30 + x / court.width_m * 200, 30 + y / court.length_m * 480];
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = "#70dfd2"; context.lineWidth = 2;
+    court.lines.forEach(([a, b]) => {
+      context.beginPath(); context.moveTo(...xy(a)); context.lineTo(...xy(b)); context.stroke();
+    });
+    context.setLineDash([6, 6]); context.beginPath();
+    context.moveTo(...xy([0, court.length_m / 2]));
+    context.lineTo(...xy([court.width_m, court.length_m / 2])); context.stroke(); context.setLineDash([]);
+    context.font = "14px Segoe UI"; context.textAlign = "center"; context.fillStyle = "#ecf3ec";
+    context.fillText("RED", 130, 260);
+    const points = court.references[reference].map(xy);
+    context.beginPath(); points.forEach(([x, y], i) => i ? context.lineTo(x, y) : context.moveTo(x, y));
+    context.closePath(); context.fillStyle = "#d9fa7326"; context.fill();
+    context.strokeStyle = "#d9fa73"; context.stroke();
+    points.forEach(([x, y], i) => {
+      context.beginPath(); context.arc(x, y, 13, 0, Math.PI * 2); context.fillStyle = "#d9fa73"; context.fill();
+      context.fillStyle = "#15231c"; context.font = "bold 17px Segoe UI"; context.textBaseline = "middle";
+      context.fillText(String(i + 1), x, y);
+    });
   }
   function range() {
     const start = Number($("#clip-start").value);
@@ -299,10 +329,53 @@
       container.append(row);
     });
   }
+  let calibrationTimer;
+  function queueCalibrationPreview() {
+    const body = { time: state.confirmedFrame, corners: state.points, calibration_reference: $("#calibration-reference").value };
+    const key = JSON.stringify([state.clip?.id, body]);
+    if (key === state.calibrationKey) return;
+    state.calibrationKey = key; state.calibration = null; state.calibrationError = "";
+    $("#confirm-court").checked = false;
+    clearTimeout(calibrationTimer);
+    $("#calibration-quality").className = "notice warning";
+    $("#calibration-quality").textContent = "Marca los cuatro puntos para previsualizar todas las líneas.";
+    if (state.points.length !== 4 || state.confirmedFrame === null) return;
+    const payload = JSON.stringify(body), identity = state.clip.id;
+    $("#calibration-quality").textContent = "Comprobando la proyección de toda la pista…";
+    calibrationTimer = setTimeout(async () => {
+      try {
+        const preview = await api(`/api/clips/${identity}/calibration`, { method: "POST", body: payload });
+        if (state.calibrationKey !== key) return;
+        state.calibration = preview;
+        $("#calibration-quality").textContent = !preview.usable
+          ? "Las líneas proyectadas tienen poco apoyo en las líneas blancas. Revisa los puntos o usa una toma más clara; no se puede confirmar así."
+          : (preview.partial ? "Calibración PARCIAL: el rectángulo verde solo es la referencia; las líneas turquesas discontinuas extrapolan el resto de la pista. "
+            : "Comprueba que TODAS las líneas turquesas coinciden con la pista, no solo las cuatro esquinas. ")
+            + `Apoyo orientativo en líneas: ${percent(preview.support)}; NO mide precisión.`;
+        $("#calibration-quality").className = preview.partial || !preview.usable ? "notice warning" : "notice";
+      } catch (failure) {
+        if (state.calibrationKey !== key) return;
+        state.calibrationError = failure.message;
+        $("#calibration-quality").textContent = failure.message;
+        $("#calibration-quality").className = "notice error";
+      }
+      drawCalibration(false);
+    }, 250);
+  }
   function drawCalibration(rebuildFields = true) {
+    queueCalibrationPreview();
     const canvas = $("#calibration-canvas");
     const context = canvas.getContext("2d");
     context.clearRect(0, 0, canvas.width, canvas.height);
+    if (state.calibration) {
+      context.strokeStyle = "#70dfd2"; context.lineWidth = Math.max(2, canvas.width / 400);
+      context.setLineDash(state.calibration.partial ? [12, 8] : []);
+      state.calibration.lines.forEach(([a, b]) => {
+        context.beginPath(); context.moveTo(a[0] * canvas.width, a[1] * canvas.height);
+        context.lineTo(b[0] * canvas.width, b[1] * canvas.height); context.stroke();
+      });
+      context.setLineDash([]);
+    }
     if (state.points.length > 1) {
       context.beginPath();
       state.points.forEach((point, index) => {
@@ -331,12 +404,21 @@
     updateReadiness();
   }
   function updateReadiness() {
+    const complete = $("#complete-mode").checked;
+    $("#ball-options").hidden = !complete;
+    $("#analysis-plan").textContent = complete
+      ? "Se analizarán PISTA + JUGADORES + PELOTA juntos en un único vídeo."
+      : "Se analizarán PISTA + JUGADORES. La pelota NO está incluida.";
+    $("#start-analysis").textContent = complete ? "Analizar pista + jugadores + pelota →" : "Analizar pista + jugadores →";
+    $("#confirm-court").disabled = !state.calibration?.usable;
     let message = "Marca las cuatro esquinas y revisa la pista.";
     let ready = false;
     try {
       const selected = range();
       if (state.confirmedFrame !== selected.start) message = "Actualiza el fotograma: has cambiado el inicio del fragmento.";
-      else if (state.points.length === 4 && $("#confirm-court").checked) {
+      else if (state.points.length === 4 && !state.calibration?.usable) {
+        message = state.calibrationError || (state.calibration ? "Corrige la proyección antes de confirmar." : "Esperando la comprobación de la pista.");
+      } else if (state.points.length === 4 && $("#confirm-court").checked) {
         ready = true;
         message = `Se analizarán ${selected.duration.toFixed(1)} s. El archivo original no se modifica.`;
       } else if (state.points.length === 4) message = "Confirma que las esquinas corresponden a esta toma.";
@@ -346,7 +428,7 @@
       message = "Falta el modelo de jugadores. Ejecuta Preparar_Tennis_Lab.ps1.";
     }
     if (state.config && $("#complete-mode").checked) {
-      const key = $("#ball-backend").value === "yolo" ? "ball_yolo" : "ball";
+      const key = $("#ball-backend").value === "tracknet" ? "ball" : "ball_yolo";
       if (!state.config.models[key]) {
         ready = false;
         message = "No está instalado el motor de pelota seleccionado. Elige otro o instala sus pesos.";
@@ -711,7 +793,9 @@
     $("#complete-mode").disabled = !state.config.models.ball && !state.config.models.ball_yolo;
     $("#ball-backend option[value=tracknet]").disabled = !state.config.models.ball;
     $("#ball-backend option[value=yolo]").disabled = !state.config.models.ball_yolo;
-    $("#ball-backend").value = state.config.models.ball ? "tracknet" : "yolo";
+    $("#ball-backend option[value=yolo_multiscale]").disabled = !state.config.models.ball_yolo;
+    $("#ball-backend").value = state.config.models.ball_yolo ? "yolo_multiscale" : "tracknet";
+    if ($("#complete-mode").disabled) $("#players-mode").checked = true;
     $("#ball-backend").addEventListener("change", updateReadiness);
     $$("input[name=analysis-mode]").forEach((input) => input.addEventListener("change", updateReadiness));
     $("#auto-court").disabled = !state.config.models.court;

@@ -88,8 +88,8 @@ class RecordedBall(BallModel):
 
 
 class RecordedObjectDetector(BallObjectDetector):
-    def __init__(self) -> None:
-        super().__init__(MODELS / "ball_yolo.onnx")
+    def __init__(self, *, multiscale: bool = False) -> None:
+        super().__init__(MODELS / "ball_yolo.onnx", multiscale=multiscale)
         self.neural_seconds: list[float] = []
         self.records: list[list[dict]] = []
 
@@ -102,8 +102,8 @@ class RecordedObjectDetector(BallObjectDetector):
 
 
 class RecordedYolo(YoloBallModel):
-    def __init__(self) -> None:
-        self.detector = RecordedObjectDetector()
+    def __init__(self, *, multiscale: bool = False) -> None:
+        self.detector = RecordedObjectDetector(multiscale=multiscale)
         self.reset()
 
 
@@ -141,7 +141,7 @@ def worker(identifier: str, calibration: Path, output: Path, backend: str) -> No
     config["ball_backend"] = backend
     started = time.perf_counter()
     models = ModelBank()
-    models.ball = RecordedBall() if backend == "tracknet" else RecordedYolo()
+    models.ball = RecordedBall() if backend == "tracknet" else RecordedYolo(multiscale=backend == "yolo_multiscale")
     models.ball_backend = backend
     if review.get("corners") is not None:
         config.update({"corners": review["corners"],
@@ -220,7 +220,9 @@ def worker(identifier: str, calibration: Path, output: Path, backend: str) -> No
         "video_seconds": summary["duration"], "processing_seconds": elapsed,
         "seconds_per_video_second": elapsed / summary["duration"],
         "processed_video_fps": result["frames"] / elapsed,
-        "ball_backend": backend, "neural_calls": len(timings),
+        "ball_backend": backend, "neural_calls": len(timings) * (2 if backend == "yolo_multiscale" else 1),
+        "detector_steps": len(timings),
+        "neural_timing_unit": "combined_scales_per_frame" if backend == "yolo_multiscale" else "single_forward",
         "neural_seconds": sum(timings),
         "neural_median_seconds": float(np.median(timings)),
         "neural_p95_seconds": float(np.percentile(timings, 95)),
@@ -290,7 +292,7 @@ def report(output: Path) -> None:
                 "No phone, battery, electricity meter, paid API or cloud GPU was used.",
         "runtime_model_names": sorted(
             {"people.onnx"} | {
-                "ball_yolo.onnx" if row["ball_backend"] == "yolo" else "ball.onnx" for row in rows
+                "ball.onnx" if row["ball_backend"] == "tracknet" else "ball_yolo.onnx" for row in rows
             }
         ),
         "model_note": "models lists installed ONNX files, not a simultaneous RAM requirement. "
@@ -469,7 +471,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=ROOT / "results")
     parser.add_argument("--id")
     parser.add_argument("--ids", nargs="+")
-    parser.add_argument("--backend", choices=("tracknet", "yolo"), default="tracknet")
+    parser.add_argument("--backend", choices=("tracknet", "yolo", "yolo_multiscale"), default="tracknet")
     args = parser.parse_args()
     if args.action == "prepare":
         prepare(args.ids)

@@ -84,6 +84,15 @@ def main():
         "corners": QUAD, "calibration_reference": SETTINGS.reference,
         "ball_backend": SETTINGS.ball_backend,
     }
+    calibration = {"time": SETTINGS.start, "corners": QUAD, "calibration_reference": SETTINGS.reference}
+    status, preview, _ = request("POST", f"/api/clips/{clip['id']}/calibration", calibration)
+    checked("calibration_previews_all_court_lines", status == 200 and len(preview["lines"]) == 9)
+    checked("calibration_reference_is_explicit", preview["reference"] == SETTINGS.reference and preview["partial"] == (SETTINGS.reference != "doubles"))
+    checked("calibration_uses_shared_geometry", configuration["court"]["width_m"] == 10.97 and configuration["court"]["length_m"] == 23.77)
+    checked("invalid_calibration_projection_rejected", request("POST", f"/api/clips/{clip['id']}/calibration", {
+        **calibration, "calibration_reference": "service_left",
+        "corners": [[0.4, 0.3], [0.6, 0.3], [0.9, 0.8], [0.1, 0.8]],
+    })[0] == 422)
     checked("invalid_corner_order_rejected", request("POST", "/api/jobs", {**base, "corners": [QUAD[0], QUAD[2], QUAD[1], QUAD[3]]})[0] == 422)
     checked("invalid_ball_backend_rejected", request("POST", "/api/jobs", {**base, "ball_backend": "invented"})[0] == 422)
     checked("out_of_range_fragment_rejected", request("POST", "/api/jobs", {

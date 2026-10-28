@@ -66,6 +66,18 @@ como recortados, normalizados, sin audio y con overlays anadidos.
 La galeria enlaza cada fuente y su licencia; no se publican videos
 ni fotogramas en Git.
 
+Las dos grabaciones de iPhone usadas para evaluacion local proceden de
+[CalTennis](https://huggingface.co/datasets/demalenk/caltennis), revision
+`4af17dd4d398aad4116a35b5a74de4388658d356`.
+Autores: Ilona Demler, Xinran Xie, Blake Werner, Anna Szczuka y Pietro
+Perona; CalTennis (2026). Los videos tienen licencia
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/):
+se conservan fuera de Git y se utilizan solo en pruebas locales no
+comerciales, con atribucion en los resultados. No se usan para entrenar
+pesos distribuibles ni se incluyen videos, fotogramas o etiquetas
+derivadas del dataset en este repositorio. La licencia del articulo no
+sustituye la del material audiovisual.
+
 FFmpeg se obtiene mediante `imageio-ffmpeg`; NumPy, OpenCV, ONNX Runtime, SciPy,
 Pillow, FastAPI, Uvicorn y las herramientas opcionales mantienen sus propias
 licencias. Este archivo no reemplaza las condiciones de esas dependencias.

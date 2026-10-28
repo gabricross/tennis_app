@@ -4,7 +4,7 @@ import sys
 import unittest
 from pathlib import Path
 from collections import deque
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import cv2
 import numpy as np
@@ -34,6 +34,35 @@ class BallTests(unittest.TestCase):
     def test_unexpected_heatmap_shape_is_an_error(self):
         with self.assertRaises(ValueError):
             ball_candidates(np.zeros((180, 320), np.uint8))
+
+    def test_single_scale_detector_preserves_its_candidates(self):
+        detector = BallObjectDetector.__new__(BallObjectDetector)
+        detector.size, detector.multiscale = 640, False
+        values = [self.candidate(100, 100)]
+        with patch.object(detector, "_candidates", return_value=values) as detect:
+            self.assertIs(detector.candidates(self.image), values)
+            detect.assert_called_once_with(self.image, 640)
+
+    def test_multiscale_fuses_duplicate_centers_before_temporal_confirmation(self):
+        detector = BallObjectDetector.__new__(BallObjectDetector)
+        detector.size, detector.multiscale = 640, True
+        first = [self.candidate(100, 100, 190), self.candidate(200, 200, 230)]
+        second = [self.candidate(101, 100, 220), self.candidate(300, 300, 200)]
+        with patch.object(detector, "_candidates", side_effect=[first, second]) as detect:
+            values = detector.candidates(self.image)
+            self.assertEqual([call.args[1] for call in detect.call_args_list], [640, 960])
+        self.assertEqual(values, [
+            self.candidate(200, 200, 230), self.candidate(101, 100, 220), self.candidate(300, 300, 200),
+        ])
+
+    def test_model_bank_keeps_light_and_multiscale_backends_distinct(self):
+        bank = ModelBank()
+        with patch("inference.YoloBallModel") as factory:
+            bank.ball_detector("yolo_multiscale")
+            factory.assert_called_once_with(multiscale=True)
+            bank.ball_detector("yolo")
+            self.assertEqual(factory.call_count, 2)
+            factory.assert_called_with(multiscale=False)
 
     def test_velocity_selects_forward_ball_not_stronger_old_position(self):
         tracker = BallTracker()
@@ -202,6 +231,7 @@ class YoloBallTests(unittest.TestCase):
     def test_letterbox_rgb_decode_and_nms(self):
         detector = BallObjectDetector.__new__(BallObjectDetector)
         detector.size, detector.confidence, detector.input_name = 640, 0.15, "images"
+        detector.multiscale = False
         detector.net = Mock()
         detector.net.run.return_value = [np.array([[
             [320, 321, 320], [320, 320, 80], [4, 4, 4], [4, 4, 4], [0.8, 0.7, 0.9],
@@ -279,6 +309,51 @@ class ActiveBallTests(unittest.TestCase):
                                     index / 30, affine)
         self.assertIsNotNone(point)
         self.assertNotEqual(point["track_id"], previous_id)
+
+    def test_expired_spare_track_cannot_inherit_the_active_ball_motion(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(11):
+            candidates = [{"x": 100 + 6 * index, "y": 100, "intensity": 220}]
+            if index < 3:
+                candidates.append({"x": 160, "y": 100, "intensity": 250})
+            point = selector.update(candidates, index / 30, affine)
+            if index == 9:
+                self.assertIsNotNone(point)
+        self.assertIsNone(point)
+        point = selector.update([{"x": 166, "y": 100, "intensity": 220}], 11 / 30, affine)
+        self.assertIsNotNone(point)
+
+    def test_stationary_memory_moves_with_camera_and_expires(self):
+        selector = ActiveBallSelector()
+        still = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(3):
+            selector.update([{"x": 160, "y": 100, "intensity": 250}], index / 30, still)
+        pan = np.float64([[1, 0, 5], [0, 1, 2]])
+        selector.update([], .1, pan)
+        np.testing.assert_allclose(selector.stationary[0][1], [165, 102])
+        selector.update([], 5.2, still)
+        self.assertEqual(selector.stationary, [])
+
+    def test_stationary_evidence_is_independent_of_live_track_assignment(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(11):
+            candidates = [{"x": 100 + 6 * index, "y": 100, "intensity": 220}]
+            if index < 2:
+                candidates.append({"x": 160, "y": 100, "intensity": 250})
+            point = selector.update(candidates, index / 30, affine)
+        self.assertIsNone(point)
+        self.assertTrue(selector.stationary)
+
+    def test_camera_loss_discards_stationary_memory(self):
+        selector = ActiveBallSelector()
+        still = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(3):
+            selector.update([{"x": 160, "y": 100, "intensity": 250}], index / 30, still)
+        self.assertTrue(selector.stationary)
+        selector.update([], .1, None)
+        self.assertEqual(selector.stationary, [])
 
 
 if __name__ == "__main__":

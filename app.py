@@ -25,7 +25,10 @@ from starlette.requests import ClientDisconnect
 
 import storage
 from config import DATA, EXAMPLE_VIDEO, MAX_ANALYSIS_SECONDS, MAX_PENDING_JOBS, MAX_UPLOAD_BYTES, MODELS, ROOT
-from court import CourtModel, validate_corners
+from court import (
+    CALIBRATION_REFERENCES, COURT_LINES, LENGTH, WIDTH, CourtModel,
+    calibration_preview, validate_corners,
+)
 from engine import analyze_clip
 from inference import ModelBank
 from media import AnalysisCancelled, check_cancel, probe, snapshot
@@ -36,14 +39,25 @@ FINISHED = {"completed", "completed_with_warnings"}
 ACTIVE = {"queued", "running", "cancelling"}
 
 
+class CalibrationRequest(BaseModel):
+    time: float = Field(ge=0, allow_inf_nan=False)
+    corners: list[list[float]]
+    calibration_reference: Literal["doubles", "service_boxes", "service_left", "service_right"] = "doubles"
+
+    @model_validator(mode="after")
+    def valid_points(self):
+        validate_corners(self.corners)
+        return self
+
+
 class AnalysisRequest(BaseModel):
     clip_id: str
     start: float = Field(ge=0, allow_inf_nan=False)
     duration: float = Field(ge=1, le=MAX_ANALYSIS_SECONDS, allow_inf_nan=False)
     mode: str = "players"
     corners: list[list[float]]
-    calibration_reference: Literal["doubles", "service_left", "service_right"] = "doubles"
-    ball_backend: Literal["tracknet", "yolo"] = "tracknet"
+    calibration_reference: Literal["doubles", "service_boxes", "service_left", "service_right"] = "doubles"
+    ball_backend: Literal["tracknet", "yolo", "yolo_multiscale"] = "tracknet"
 
     @model_validator(mode="after")
     def valid_configuration(self):
@@ -229,6 +243,10 @@ def configuration():
         "models": {name: (MODELS / f"{name}.onnx").exists() for name in ("people", "court", "ball", "ball_yolo")},
         "storage": str(DATA), "private_local_storage": True,
         "previous_demo_available": EXAMPLE_VIDEO.is_file(),
+        "court": {
+            "width_m": WIDTH, "length_m": LENGTH, "lines": COURT_LINES,
+            "references": {name: points.tolist() for name, points in CALIBRATION_REFERENCES.items()},
+        },
     }
 
 
@@ -313,8 +331,7 @@ def poster(identity: str):
     return FileResponse(storage.resource_dir(identity) / "poster.jpg", media_type="image/jpeg")
 
 
-@app.get("/api/clips/{identity}/frame")
-def frame(identity: str, time: float = 0):
+def preview_path(identity: str, time: float) -> Path:
     clip = require_clip(identity)
     if not 0 <= time <= clip["metadata"]["duration"] - 0.05:
         raise HTTPException(400, "El instante está fuera del vídeo.")
@@ -322,21 +339,31 @@ def frame(identity: str, time: float = 0):
     target = directory / f"preview_{round(time * 1000)}.jpg"
     if not target.exists():
         snapshot(directory / "upload", time, target)
-    return FileResponse(target, media_type="image/jpeg")
+    return target
+
+
+@app.get("/api/clips/{identity}/frame")
+def frame(identity: str, time: float = 0):
+    return FileResponse(preview_path(identity, time), media_type="image/jpeg")
+
+
+@app.post("/api/clips/{identity}/calibration")
+def review_calibration(identity: str, configuration: CalibrationRequest):
+    image = cv2.imread(str(preview_path(identity, configuration.time)))
+    if image is None:
+        raise HTTPException(422, "No se ha podido leer el fotograma de calibración.")
+    try:
+        return calibration_preview(image, configuration.corners, configuration.calibration_reference)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
 
 
 @app.get("/api/clips/{identity}/court")
 def propose_court(identity: str, time: float = 0):
     global court_model
-    clip = require_clip(identity)
-    if not 0 <= time <= clip["metadata"]["duration"] - 0.05:
-        raise HTTPException(400, "El instante está fuera del vídeo.")
+    target = preview_path(identity, time)
     if not (MODELS / "court.onnx").exists():
         return {"corners": None, "method": "manual_required", "message": "El modelo de pista no está instalado. Marca las esquinas manualmente."}
-    directory = storage.resource_dir(identity)
-    target = directory / f"preview_{round(time * 1000)}.jpg"
-    if not target.exists():
-        snapshot(directory / "upload", time, target)
     image = cv2.imread(str(target))
     if image is None:
         raise HTTPException(422, "No se ha podido leer el fotograma de calibración.")
@@ -353,7 +380,7 @@ def start_job(configuration: AnalysisRequest):
         raise HTTPException(422, "El fragmento termina después del vídeo.")
     if not (MODELS / "people.onnx").exists():
         raise HTTPException(503, "Falta el modelo de jugadores. Ejecuta la preparación de modelos.")
-    ball_file = "ball_yolo.onnx" if configuration.ball_backend == "yolo" else "ball.onnx"
+    ball_file = "ball.onnx" if configuration.ball_backend == "tracknet" else "ball_yolo.onnx"
     if configuration.mode == "complete" and not (MODELS / ball_file).exists():
         raise HTTPException(503, "Falta el modelo de pelota seleccionado. Elige otro motor o instala sus pesos.")
     if manager is None:

@@ -232,19 +232,34 @@ class BallModel:
 
 
 class BallObjectDetector:
-    def __init__(self, path, *, size: int = 640, confidence: float = 0.15) -> None:
-        if size not in (640, 960, 1280) or not 0 < confidence < 1:
+    def __init__(self, path, *, size: int = 640, confidence: float = 0.15, multiscale: bool = False) -> None:
+        if size not in (640, 960, 1280) or not 0 < confidence < 1 or (multiscale and size != 640):
             raise ValueError("Invalid ball detector size or confidence.")
         self.net = session(path)
         self.input_name = self.net.get_inputs()[0].name
         self.size, self.confidence = size, confidence
+        self.multiscale = multiscale
 
     def candidates(self, image: np.ndarray) -> list[dict]:
+        candidates = self._candidates(image, self.size)
+        if not self.multiscale:
+            return candidates
+        candidates.extend(self._candidates(image, 960))
+        merged = []
+        for candidate in sorted(candidates, key=lambda value: -value["intensity"]):
+            if not any(
+                np.hypot(candidate["x"] - other["x"], candidate["y"] - other["y"]) <= 3
+                for other in merged
+            ):
+                merged.append(candidate)
+        return merged
+
+    def _candidates(self, image: np.ndarray, size: int) -> list[dict]:
         height, width = image.shape[:2]
-        ratio = min(self.size / width, self.size / height)
+        ratio = min(size / width, size / height)
         resized = cv2.resize(image, (round(width * ratio), round(height * ratio)))
-        left, top = (self.size - resized.shape[1]) // 2, (self.size - resized.shape[0]) // 2
-        padded = np.full((self.size, self.size, 3), 114, np.uint8)
+        left, top = (size - resized.shape[1]) // 2, (size - resized.shape[0]) // 2
+        padded = np.full((size, size, 3), 114, np.uint8)
         padded[top:top + resized.shape[0], left:left + resized.shape[1]] = resized
         blob = cv2.dnn.blobFromImage(padded, 1 / 255, swapRB=True)
         output = self.net.run(None, {self.input_name: blob})[0]
@@ -267,8 +282,8 @@ class BallObjectDetector:
 
 
 class YoloBallModel(BallModel):
-    def __init__(self) -> None:
-        self.detector = BallObjectDetector(MODELS / "ball_yolo.onnx", size=640)
+    def __init__(self, *, multiscale: bool = False) -> None:
+        self.detector = BallObjectDetector(MODELS / "ball_yolo.onnx", multiscale=multiscale)
         self.reset()
 
     def detect(self, frames: deque[np.ndarray], timestamp: float, *, infer: bool = True) -> dict | None:
@@ -295,10 +310,10 @@ class ModelBank:
         return self.people
 
     def ball_detector(self, backend: str = "tracknet") -> BallModel | YoloBallModel:
-        if backend not in ("tracknet", "yolo"):
+        if backend not in ("tracknet", "yolo", "yolo_multiscale"):
             raise ValueError("Unknown ball backend.")
         if self.ball is None or backend != self.ball_backend:
-            self.ball = BallModel() if backend == "tracknet" else YoloBallModel()
+            self.ball = BallModel() if backend == "tracknet" else YoloBallModel(multiscale=backend == "yolo_multiscale")
             self.ball_backend = backend
         self.ball.reset()
         return self.ball

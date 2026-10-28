@@ -10,7 +10,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from court import (
     CALIBRATION_REFERENCES, COURT_LINES, LENGTH, WIDTH, WORLD_CORNERS, CourtCamera,
-    court_matrix, line_support, project, validate_corners,
+    calibration_preview, court_matrix, line_support, project, validate_corners,
 )
 from engine import summarize
 from inference import Detection, PlayerSelector
@@ -23,6 +23,55 @@ class CourtTests(unittest.TestCase):
         matrix = court_matrix(QUAD, (1280, 720))
         actual = project(project(WORLD_CORNERS, matrix), np.linalg.inv(matrix))
         np.testing.assert_allclose(actual, WORLD_CORNERS, atol=1e-4)
+
+    def test_partial_reference_cannot_project_full_court_through_horizon(self):
+        with self.assertRaisesRegex(ValueError, "detrás de la cámara"):
+            court_matrix([[0.4, 0.3], [0.6, 0.3], [0.9, 0.8], [0.1, 0.8]], (640, 360), "service_left")
+
+    def test_calibration_preview_shows_full_lines_not_just_reference_rectangle(self):
+        image = np.zeros((720, 1280, 3), np.uint8)
+        matrix = court_matrix(QUAD, (1280, 720))
+        for line in COURT_LINES:
+            a, b = np.rint(project(line, matrix)).astype(int)
+            cv2.line(image, tuple(a), tuple(b), (255, 255, 255), 3)
+        result = calibration_preview(image, QUAD)
+        self.assertEqual(len(result["lines"]), len(COURT_LINES))
+        self.assertEqual(result["visible_corners"], 4)
+        self.assertTrue(result["usable"])
+        self.assertFalse(result["partial"])
+        reference = project(CALIBRATION_REFERENCES["service_left"], matrix) / [1280, 720]
+        partial = calibration_preview(image, reference.tolist(), "service_left")
+        self.assertTrue(partial["partial"])
+        self.assertTrue(partial["usable"])
+        np.testing.assert_allclose(result["lines"], partial["lines"], atol=1e-5)
+        self.assertGreater(result["support"], 0.95)
+
+    def test_calibration_preview_does_not_approve_an_image_without_lines(self):
+        result = calibration_preview(np.zeros((360, 640, 3), np.uint8), QUAD)
+        self.assertFalse(result["usable"])
+        self.assertEqual(result["support"], 0)
+
+    def test_pale_court_surface_is_not_counted_as_white_line_support(self):
+        image = np.full((360, 640, 3), [170, 170, 215], np.uint8)
+        result = calibration_preview(image, QUAD)
+        self.assertFalse(result["usable"])
+        self.assertEqual(result["support"], 0)
+
+    def test_real_white_lines_remain_visible_on_a_pale_surface(self):
+        image = np.full((360, 640, 3), [170, 170, 215], np.uint8)
+        matrix = court_matrix(QUAD, (640, 360))
+        for line in COURT_LINES:
+            a, b = np.rint(project(line, matrix)).astype(int)
+            cv2.line(image, tuple(a), tuple(b), (250, 250, 250), 3)
+        self.assertGreater(line_support(image, matrix), 0.95)
+
+    def test_bright_colored_shadow_stripes_are_not_white_paint(self):
+        image = np.full((360, 640, 3), [90, 90, 120], np.uint8)
+        matrix = court_matrix(QUAD, (640, 360))
+        for line in COURT_LINES:
+            a, b = np.rint(project(line, matrix)).astype(int)
+            cv2.line(image, tuple(a), tuple(b), (170, 170, 215), 3)
+        self.assertEqual(line_support(image, matrix), 0)
 
     def test_crossed_corners_are_rejected(self):
         with self.assertRaises(ValueError):
@@ -106,13 +155,27 @@ class CourtTests(unittest.TestCase):
         )
 
     def test_partial_reference_round_trip_uses_service_coordinates(self):
-        for reference in ("service_left", "service_right"):
+        for reference in ("service_boxes", "service_left", "service_right"):
             with self.subTest(reference=reference):
                 matrix = court_matrix(QUAD, (1280, 720), reference)
                 actual = project(CALIBRATION_REFERENCES[reference], matrix)
                 np.testing.assert_allclose(actual, np.array(QUAD) * [1280, 720], atol=1e-3)
                 restored = project(actual, np.linalg.inv(matrix))
                 np.testing.assert_allclose(restored, CALIBRATION_REFERENCES[reference], atol=1e-4)
+
+    def test_broader_service_reference_works_without_weakening_small_quad_rejection(self):
+        image = np.zeros((720, 1280, 3), np.uint8)
+        matrix = court_matrix([[0.35, 0.35], [0.65, 0.35], [0.85, 0.65], [0.15, 0.65]], (1280, 720))
+        for line in COURT_LINES:
+            a, b = np.rint(project(line, matrix)).astype(int)
+            cv2.line(image, tuple(a), tuple(b), (255, 255, 255), 3)
+        left = project(CALIBRATION_REFERENCES["service_left"], matrix) / [1280, 720]
+        with self.assertRaisesRegex(ValueError, "poco espacio"):
+            calibration_preview(image, left.tolist(), "service_left")
+        both = project(CALIBRATION_REFERENCES["service_boxes"], matrix) / [1280, 720]
+        result = calibration_preview(image, both.tolist(), "service_boxes")
+        self.assertTrue(result["usable"])
+        self.assertTrue(result["partial"])
 
     def test_service_midpoint_projects_to_net_ground_not_net_tape(self):
         matrix = court_matrix(QUAD, (1280, 720), "service_left")

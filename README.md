@@ -54,29 +54,36 @@ Alternativa desde PowerShell, dentro de esta carpeta:
 & "$env:LOCALAPPDATA\TennisLab\.venv\Scripts\python.exe" .\run_server.py --open
 ```
 
-**No cuesta dinero ni necesita una cuenta.** El codigo puede descargarse
-desde GitHub; el servidor de analisis sigue siendo privado y local.
+**No necesita una cuenta ni servicios de inferencia de pago.** El codigo
+puede descargarse desde GitHub; el servidor de analisis sigue siendo
+privado y local. Consume recursos y electricidad de tu ordenador.
 La direccion localhost solo funciona en este ordenador. GitHub Pages no
 ejecuta este motor Python ni procesa clips.
 
 ## Primer analisis
 
 1. Carga un MP4, MOV, WebM, MKV o AVI de hasta 300 MB. El original debe durar entre 1 segundo y 30 minutos.
-2. Selecciona el inicio y entre **1 y 120 segundos** de analisis. El resto del video no se analiza. No se trunca sin indicartelo.
-3. Actualiza el fotograma si has cambiado el inicio.
-4. Usa **Proponer pista con IA** o marca las cuatro esquinas exteriores de dobles, en este orden:
+2. Elige **Pista + jugadores + pelota** para ver las tres capas juntas en un unico analisis (seleccion inicial si hay motor de pelota). **Solo pista y jugadores** excluye explicitamente la pelota.
+3. Selecciona el inicio y entre **1 y 120 segundos** de analisis; la interfaz propone hasta 30 segundos. El resto del video no se analiza. No se trunca sin indicartelo.
+4. Actualiza el fotograma si has cambiado el inicio.
+5. Usa **Proponer pista con IA** o marca las cuatro esquinas exteriores de dobles, en este orden:
    - Arriba izquierda.
    - Arriba derecha.
    - Abajo derecha.
    - Abajo izquierda.
-5. Arrastra los puntos para corregirlos o utiliza sus coordenadas en porcentaje.
-6. Confirma que has revisado la pista. La propuesta del modelo nunca inicia el analisis sin tu revision.
-7. Empieza por **Jugadores y pista**. El modo **Anadir pelota** es experimental y sensiblemente mas lento.
+6. Arrastra los puntos para corregirlos o utiliza sus coordenadas en porcentaje. El esquema numerado indica que referencias estas marcando.
+7. Revisa **todas las lineas turquesas superpuestas**, no solo el rectangulo verde. La interfaz impide confirmar si el apoyo orientativo en lineas blancas es menor de 0,3 o la proyeccion es invalida. Ese apoyo es una comprobacion de coherencia, no precision ni garantia de calibracion correcta. La propuesta del modelo nunca inicia el analisis sin tu revision.
 8. Explora el resultado o vuelve mas tarde a la biblioteca.
 
 ### Si no se ven las esquinas exteriores
 
-En **Referencias visibles para calibrar**, puedes seleccionar la columna
+En **Referencias visibles para calibrar**, prueba primero **Rectangulo de
+saque completo: ambos lados** si se ven las dos lineas de saque y los dos
+laterales de individuales: marca sus cuatro intersecciones exteriores.
+Es una referencia mas amplia que una sola columna, sin relajar el rechazo
+de rectangulos demasiado pequenos. Los fondos siguen siendo extrapolados.
+
+Tambien puedes seleccionar la columna
 izquierda o derecha de cuadros de saque. Marca las cuatro intersecciones
 de las dos lineas de saque con la linea central y el lateral de individuales
 de esa columna, en orden horario desde el punto lejano izquierdo.
@@ -91,6 +98,16 @@ resultado. No convierte esas posiciones en mediciones fisicas validadas.
 Cambiar la referencia borra los puntos anteriores y exige confirmarlos
 de nuevo. Las calibraciones existentes conservan el comportamiento anterior.
 
+El rectangulo verde de saque **no es el contorno completo de la pista**.
+Ahora se muestra un esquema con sus cuatro puntos, y todas las lineas
+proyectadas se dibujan en turquesa discontinua para advertir de la extrapolacion.
+Una referencia parcial que proyecte parte del campo a traves del horizonte
+se rechaza: no se dibuja una pista invertida como si fuera valida.
+El apoyo sobre lineas exige tambien contraste local de trazo: el suelo
+claro de una pista no debe contarse entero como pintura blanca. Aun asi,
+la red, las vallas y otros trazos pueden producir coincidencias falsas;
+el valor no sustituye la revision visual de todas las lineas.
+
 En calibracion parcial, la camara se comprueba fotograma a fotograma con
 flujo optico bidireccional y homografias robustas. Los jugadores se excluyen
 de las referencias estaticas desde el primer fotograma. Si se pierde el
@@ -100,9 +117,9 @@ Los fotogramas sin ajuste fiable siguen siendo huecos, no trayectorias inventada
 Estas comprobaciones proyectivas, el flujo inverso y la recuperacion verificada
 tambien se aplican ahora a la calibracion exterior completa.
 
-### Dos motores de pelota
+### Motores de pelota
 
-El modo **Anadir pelota** permite elegir explicitamente un motor. Las
+El modo **Pista + jugadores + pelota** permite elegir explicitamente un motor. Las
 configuraciones anteriores conservan TrackNet; no se sustituye un modelo
 ausente por otro silenciosamente.
 
@@ -116,6 +133,14 @@ ausente por otro silenciosamente.
   amarillos, compensando el desplazamiento de camara, ayuda a priorizar
   candidatos frente a pelotas de reserva; no garantiza identificar la
   pelota activa.
+- **YOLO multiescala**: usa los mismos pesos a 640 y 960 en cada fotograma.
+  Los centros duplicados se fusionan antes de la asociacion temporal:
+  dos escalas no cuentan como dos observaciones independientes de movimiento.
+  Es la seleccion inicial de la web cuando estan instalados los pesos YOLO,
+  y consume mas CPU. Puedes escoger el ligero para reducir el coste.
+  La API conserva sus valores por defecto anteriores; los trabajos guardados
+  con `yolo` siguen utilizando una sola escala. El nuevo valor explicito
+  de `ball_backend` es `yolo_multiscale`.
 
 El segundo motor se instala aparte, sin descargar codigo Python ni
 instalar Ultralytics:
@@ -129,12 +154,22 @@ los metadatos embebidos del modelo declaran AGPL-3.0**. Esta discrepancia
 se conserva en su ficha local: revisa los derechos originales antes de
 redistribuirlo comercialmente. No se incluyen pesos en Git.
 
-Ambos motores ahora exigen una identidad de pelota con al menos tres
+Todos los modos de pelota exigen una identidad con al menos tres
 observaciones y movimiento coherente, compensando la camara. Un candidato
 estatico fuerte no basta. Se rechazan desplazamientos compatibles con
 ruido estacionario; perder el registro obliga a confirmar otra vez.
-Las estelas usan identidad y continuidad explicitas: nunca unen huecos,
-saltos largos ni dos pelotas distintas. Se prefieren huecos a marcar una
+Las posiciones con tres candidatos casi inmoviles durante al menos
+0,06 s se recuerdan durante hasta 5 s sin nueva evidencia, compensando la
+camara. Las coincidencias a 3 pixeles del modelo se excluyen antes de
+asignar identidades: una pelota de reserva no debe heredar la historia
+de movimiento de la activa cuando caduca su identidad anterior.
+La evidencia estatica se acumula por posicion, independientemente de
+la asignacion de la pelota activa. Se borra si se pierde el registro
+de camara. Una pelota sostenida o casi quieta puede quedar sin marcar;
+si sale de esa vecindad debe volver a superar los controles de movimiento.
+Las estelas usan identidad y continuidad explicitas: no unen huecos,
+saltos rechazados ni muestras con identidades distintas. Una identidad
+estimada erroneamente sigue siendo posible. Se prefieren huecos a marcar una
 pelota de reserva. Una pelota sostenida o casi inmovil tambien puede
 quedar sin marcar; no se garantiza la identidad en todos los encuadres.
 Al reprocesar las detecciones neuronales cacheadas de las diez fuentes
@@ -142,6 +177,118 @@ anteriores, la revision limitada paso de 13 posiciones correctas y 2
 incorrectas a 11 correctas, 0 incorrectas y 4 huecos sobre esas mismas
 15 etiquetas visibles. Es un intercambio deliberado entre cobertura y
 rechazo de candidatos falsos, no un test ciego ni una precision general.
+
+### Evaluacion local con grabaciones de iPhone
+
+Se han preparado dos grabaciones desde el fondo de **45 y 90 segundos** de
+[CalTennis](https://huggingface.co/datasets/demalenk/caltennis), revision
+`4af17dd4d398aad4116a35b5a74de4388658d356`. El
+[articulo del dataset](https://arxiv.org/abs/2606.20542) describe camaras
+principales de iPhone 14 o posteriores, HD a 60 Hz y tripodes de alrededor
+de 1,65 m. No son tomas de tribuna elevada. Los recortes locales se
+normalizaron a 1280 x 726 y 30 fps. Son dos grabaciones de la misma
+sesion/pista, no dos partidos independientes.
+
+Credito: Ilona Demler, Xinran Xie, Blake Werner, Anna Szczuka y Pietro
+Perona; CalTennis (2026). **La licencia de los videos es CC BY-NC 4.0**,
+no la licencia del articulo. Se utilizan solo para evaluacion local no
+comercial, con atribucion en metadatos y resultados. No se incluyen
+videos, fotogramas, etiquetas derivadas ni pesos entrenados con ellos en Git.
+Una eventual demo comercial requiere material con derechos adecuados.
+
+La calibracion se reviso sobre referencias fisicas del suelo; no se
+acepto automaticamente la geometria de origen. Se conserva la advertencia
+de extrapolacion parcial. Los numeros de apoyo en pintura no certifican
+distancias ni velocidades.
+
+La revision manual de 24 fotogramas produjo **8 posiciones claramente
+visibles de pelota activa**. Los ambiguos no se cuentan como ausencia.
+Una etiqueta inicial adicional se retiro cuando siete fotogramas vecinos
+demostraron que era una pelota de reserva inmovil; esa adjudicacion queda
+documentada. No es un conjunto de test ciego ni representativo.
+
+En ventanas de hasta 20 fotogramas previos a cada etiqueta, el seguimiento
+ligero localizo 4/8 posiciones; a 960 o 1280, 5/8; y la fusion 640+960,
+7/8, sin salidas incorrectas en esas etiquetas, antes del refuerzo de
+memoria estatica. El hueco restante fue el
+primer fotograma, que no permite confirmar movimiento. **Son resultados
+de diagnostico en ventanas, no la precision del video completo.**
+La alternativa de flujo optico en huecos YOLO no mejoro la muestra y no se
+activo. El nuevo modo multiescala se contrasto tambien sobre los diez
+fragmentos anteriores completos de 4 s: antes de reforzar el rechazo de
+reservas obtuvo 12/15 posiciones correctas, 0 incorrectas y 3 huecos.
+La version final con memoria estatica conserva **11/15 correctas,
+0 incorrectas y 4 huecos** al reprocesar esas mismas medidas neuronales.
+Es un filtro mas conservador, no una mejora uniforme de cobertura.
+
+La revision del primer recorrido largo encontro 18 marcas sobre una
+reserva fija que no aparecian en la pequena muestra de etiquetas.
+Por eso no se utiliza el 7/8 como prueba de fiabilidad general.
+Se reprodujo la transferencia incorrecta de identidad, se corrigio
+el productor y se comprobaron de nuevo las secuencias problematicas.
+
+#### Resultados de los dos recorridos completos corregidos
+
+Se ejecutaron los dos intervalos completos con **YOLO multiescala y la
+memoria estatica final**, a traves de la cola y del exportador reales:
+
+| Grabacion | Duracion normalizada | Fotogramas | Cobertura pelota | Jugador arriba | Jugador abajo |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A | 44,967 s | 1349 | 16,5 % | 71,6 % | 100 % |
+| B | 89,967 s | 2699 | 45,2 % | 98,9 % | 96,2 % |
+
+La normalizacion produjo un fotograma menos por recorte. Se verifico
+la igualdad de indices y duraciones entre original normalizado, MP4
+anotado, JSON y muestras; se decodificaron los **4048 fotogramas** anotados.
+Tambien se contrastaron todas las filas de pelota y las 2532 observaciones
+CSV de jugadores con sus JSON, las identidades y la continuidad.
+Hubo registro de camara valido en todas las muestras de ambos clips;
+eso no certifica que la calibracion sea metricamente exacta.
+
+Sobre las mismas ocho posiciones manuales visibles, esta vez tomadas del
+**recorrido completo**, hubo **6 localizadas, 0 posiciones incorrectas y
+2 huecos**: el primer fotograma de B y su fotograma 105. No es el 7/8 de
+las ventanas cortas anteriores. El filtro conservador pierde una de esas
+observaciones; esta pequena muestra revisada no mide la precision general
+ni permite afirmar que todos los demas candidatos sean correctos.
+
+En A, la auditoria de todas las salidas paso de **18 marcas sobre la
+reserva fija a ninguna marca cercana a esa reserva**. En B se revisaron
+los ocho puntos cercanos a la reserva conocida, alrededor de los
+fotogramas 2310-2314 y 2455-2457: las imagenes originales vecinas muestran
+pasos de la pelota en movimiento, no una toma de la reserva. La reserva
+confirmada en el fotograma 2650 tampoco se selecciono. Es una auditoria
+de casos concretos, no una garantia de ausencia de otros errores.
+
+Para el jugador cercano de B se estimaron **47,8 m observados durante
+85,0 s evaluables**, media de 2,0 km/h y pico de ventana de 10,0 km/h.
+El jugador lejano tuvo deteccion frecuente, pero solo **31,5 s evaluables
+para movimiento**: la extrapolacion y la resolucion descartan muchas
+posiciones. No se debe confundir cobertura de cajas con disponibilidad
+o precision de metros y km/h.
+
+En CPU AMD Ryzen 5 PRO 7530U, el recorrido B necesito **1598,66 s
+(26 min 39 s), incluyendo render**, unas 17,8 veces su duracion.
+El pico de RSS muestreado cada segundo del arbol de procesos fue
+**782,9 MiB** en B y **791,0 MiB** en A; no es memoria movil ni un maximo
+continuo garantizado. El tiempo transcurrido registrado para A fue
+26054,01 s durante la continuacion entre sesiones. No se acepta como
+medicion representativa de rendimiento: los forwards neuronales sumaron
+599,36 s y el tiempo de CPU muestreado fue 2289,95 s; no se atribuye toda
+esa diferencia al modelo ni se inventa una duracion corregida.
+
+La revision final paso **85 pruebas unitarias, 49 comprobaciones API y
+36 de navegador real**, ademas de sintaxis y compatibilidad de dependencias.
+Son controles de regresion y funcionamiento, no pruebas de precision
+del detector. Los informes, fotogramas y caches de esta evaluacion
+permanecen fuera del repositorio por la licencia de las grabaciones.
+
+No se ha hecho fine-tuning ni se han cambiado pesos: una muestra tan
+pequena no permite entrenar y validar de forma fiable. Para una fase de
+entrenamiento hacen falta anotaciones suficientes, negativos de pelotas
+de reserva y separacion por grabaciones/sesiones con derechos adecuados.
+No se promete deteccion perfecta, especialmente con oclusiones o pelotas
+de pocos pixeles.
 
 ### Metros y km/h de jugadores (JSON version 3)
 
@@ -251,7 +398,19 @@ arbitrarios. Si no recupera una toma fiable, recorta otra y calibra de nuevo.
 Esta version utiliza CPU y no funciona en tiempo real.
 El coste y la latencia dependen especialmente del motor de pelota elegido.
 
-En las pruebas de este ordenador, un fragmento de dos segundos necesito aproximadamente 11 segundos en modo jugadores y cerca de dos minutos con pelota. Depende del contenido, las recuperaciones del jugador lejano y los recursos libres.
+En la comprobacion final con YOLO multiescala, un fragmento de dos
+segundos necesito 25,4 segundos incluyendo render. El recorrido completo
+de 89,967 segundos necesito 26 min 39 s en este ordenador; los detalles
+y limites estan en la evaluacion de iPhone anterior. No extrapoles el
+resultado de un intervalo corto a cualquier partido: influyen el
+contenido, las recuperaciones del jugador lejano y los recursos libres.
+
+**No se ha ejecutado la inferencia en un telefono ni hay una app nativa.**
+La interfaz se ha comprobado a 390 px de ancho, pero eso no demuestra
+rendimiento movil. No se pueden deducir tiempo, bateria, temperatura o
+memoria de un telefono a partir de estas mediciones CPU de Windows.
+No se han usado GPU de nube ni servicios de inferencia de pago; el
+consumo energetico local no se ha medido.
 
 Empieza con intervalos cortos. Cargar un video largo no implica que todo vaya a procesarse.
 
@@ -344,7 +503,7 @@ Las coordenadas del ejemplo deben sustituirse por las de tu grabacion
 individuales visibles; `--start` selecciona su inicio y `--url` otro puerto
 local. Los scripts no necesitan el video original del desarrollador.
 Para una referencia interior, anade
-`--calibration-reference service_left` o `service_right` y utiliza sus
+`--calibration-reference service_boxes`, `service_left` o `service_right` y utiliza sus
 cuatro coordenadas visibles, no las de las esquinas exteriores.
 
 La prueba de navegador necesita Playwright y Edge. Instala
@@ -354,7 +513,8 @@ identificados como pruebas; la prueba de interfaz elimina el suyo al acabar.
 La prueba API conserva su resultado positivo para inspeccion en la biblioteca.
 Usa `--players-only` en ambas herramientas para comprobar una instalacion
 ligera sin los modelos opcionales.
-Para verificar la pelota ligera, anade `--ball-backend yolo`. La prueba
+Para verificar la pelota ligera, anade `--ball-backend yolo`; para la
+fusion de escalas, `--ball-backend yolo_multiscale`. La prueba
 API comprueba el motor solicitado, una muestra de pelota por fotograma
 y los campos de su CSV; la prueba de navegador selecciona y ejecuta
 realmente el modo pelota cuando no se usa `--players-only`.
@@ -377,6 +537,11 @@ descargan desde fuentes licenciadas. No se necesita ese material para
 usar la aplicacion o ejecutar sus pruebas unitarias. Si no conservas
 el clip nocturno, aporta una copia licenciada y su ficha antes de
 ejecutar este benchmark concreto.
+
+Para repetir el benchmark con fusion de escalas, cambia `--backend yolo`
+por `--backend yolo_multiscale` y elige una carpeta `--output` distinta en
+los cuatro comandos de ejecucion, puntuacion, informe y verificacion.
+No mezcles resultados de motores distintos en una misma carpeta.
 
 Se procesan **cuatro segundos de cada archivo distinto**, no diez
 partidos completos. El conjunto incluye interiores, tomas nocturnas,

@@ -17,6 +17,9 @@ PLAY_BOUNDS = (-4.0, -7.0, WIDTH + 4.0, LENGTH + 7.0)
 WORLD_CORNERS = np.array([[0, 0], [WIDTH, 0], [WIDTH, LENGTH], [0, LENGTH]], np.float32)
 CALIBRATION_REFERENCES = {
     "doubles": WORLD_CORNERS,
+    "service_boxes": np.array(
+        [[1.37, SERVICE_TOP], [9.60, SERVICE_TOP], [9.60, SERVICE_BOTTOM], [1.37, SERVICE_BOTTOM]], np.float32
+    ),
     "service_left": np.array(
         [[1.37, SERVICE_TOP], [WIDTH / 2, SERVICE_TOP], [WIDTH / 2, SERVICE_BOTTOM], [1.37, SERVICE_BOTTOM]], np.float32
     ),
@@ -71,14 +74,25 @@ def court_matrix(corners, size: tuple[int, int], reference: str = "doubles") -> 
     if reference not in CALIBRATION_REFERENCES:
         raise ValueError("Referencia de calibración desconocida.")
     values = validate_corners(corners)
-    return cv2.getPerspectiveTransform(
+    matrix = cv2.getPerspectiveTransform(
         CALIBRATION_REFERENCES[reference], values * np.array(size, np.float32)
     )
+    depth = np.column_stack((WORLD_CORNERS, np.ones(4))) @ matrix[2]
+    if np.min(np.abs(depth)) < 1e-8 or np.any(np.sign(depth) != np.sign(depth[0])):
+        raise ValueError(
+            "Las referencias proyectan parte de la pista detrás de la cámara. "
+            "Revisa los puntos o usa una toma más elevada."
+        )
+    return matrix
 
 
 def white_distance(image: np.ndarray) -> np.ndarray:
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, np.array([0, 0, 155]), np.array([179, 115, 255]))
+    mask = cv2.inRange(hsv, np.array([0, 0, 155]), np.array([179, 40, 255]))
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    size = max(9, round(image.shape[1] / 40) | 1)
+    contrast = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, np.ones((size, size), np.uint8))
+    mask = cv2.bitwise_and(mask, np.where(contrast >= 12, 255, 0).astype(np.uint8))
     return cv2.distanceTransform(255 - mask, cv2.DIST_L2, 3)
 
 
@@ -98,6 +112,23 @@ def line_support(
     xy[:, 0] = np.clip(xy[:, 0], 0, image.shape[1] - 1)
     xy[:, 1] = np.clip(xy[:, 1], 0, image.shape[0] - 1)
     return float(np.mean(distances[xy[:, 1], xy[:, 0]] <= tolerance))
+
+
+def calibration_preview(image: np.ndarray, corners, reference: str = "doubles") -> dict:
+    height, width = image.shape[:2]
+    matrix = court_matrix(corners, (width, height), reference)
+    scale = np.array([width, height])
+    outline = project(WORLD_CORNERS, matrix) / scale
+    support = line_support(image, matrix, 6, allow_partial=reference != "doubles")
+    return {
+        "reference": reference,
+        "partial": reference != "doubles",
+        "lines": [(project(line, matrix) / scale).tolist() for line in COURT_LINES],
+        "court_corners": outline.tolist(),
+        "visible_corners": int(np.all((outline >= -1e-5) & (outline <= 1 + 1e-5), axis=1).sum()),
+        "support": support,
+        "usable": support >= 0.3,
+    }
 
 
 class CourtModel:
