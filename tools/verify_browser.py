@@ -184,8 +184,10 @@ def main() -> None:
             page.get_by_role("link", name="Comparar ambos", exact=False).click()
         comparison = popup.value
         comparison.on("pageerror", lambda error: errors.append(str(error)))
+        comparison.locator("#play").wait_for(state="visible")
         comparison.wait_for_function(
-            "()=>[...document.querySelectorAll('video')].every(v=>v.readyState>=2)"
+            "()=>document.querySelectorAll('video').length===2"
+            "&&[...document.querySelectorAll('video')].every(v=>v.readyState>=2)"
             "&&!document.querySelector('#play').disabled"
         )
         comparison.get_by_role("button", name="Reproducir ambos", exact=True).click()

@@ -264,6 +264,54 @@ class YoloBallTests(unittest.TestCase):
 
 
 class ActiveBallTests(unittest.TestCase):
+    def test_new_static_candidate_after_a_gap_cannot_inherit_a_moving_track(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(5):
+            point = selector.update(
+                [{"x": 100 + 5 * index, "y": 120 - 3 * index, "intensity": 220}],
+                index / 30, affine,
+            )
+        self.assertIsNotNone(point)
+        for index in range(5, 8):
+            self.assertIsNone(selector.update([], index / 30, affine))
+        for index in range(8, 12):
+            point = selector.update(
+                [{"x": 150, "y": 190, "intensity": 240}], index / 30, affine,
+            )
+            self.assertIsNone(point)
+
+    def test_fast_tracknet_cadence_keeps_its_identity_across_a_gap(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        identity = None
+        for index in (0, 3, 6, 9, 13):
+            point = selector.update(
+                [{"x": 70 + 12 * index, "y": 90, "intensity": 220}], index / 30, affine,
+            )
+            if index >= 6:
+                self.assertIsNotNone(point)
+                if identity is None:
+                    identity = point["track_id"]
+                self.assertEqual(point["track_id"], identity)
+
+    def test_large_direction_change_requires_new_motion_confirmation(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(4):
+            point = selector.update(
+                [{"x": 100 + 15 * index, "y": 100, "intensity": 220}], index / 30, affine,
+            )
+        identity = point["track_id"]
+        for index, position in enumerate(((110, 125), (90, 140), (70, 155)), start=4):
+            point = selector.update(
+                [{"x": position[0], "y": position[1], "intensity": 220}], index / 30, affine,
+            )
+            if index < 6:
+                self.assertIsNone(point)
+        self.assertIsNotNone(point)
+        self.assertNotEqual(point["track_id"], identity)
+
     def test_old_outlier_does_not_hide_a_new_coherent_arc(self):
         selector = ActiveBallSelector()
         affine = np.float64([[1, 0, 0], [0, 1, 0]])

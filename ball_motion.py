@@ -94,6 +94,9 @@ class ActiveBallSelector:
                     velocity = (last - prior) / (last_time - prior_time)
                 expected = last + velocity * dt
                 gate = min(140, 12 + 1200 * dt)
+                if len(track.points) >= 3 and dt > 0.05:
+                    # A gap must not lend confirmed motion to an unrelated candidate.
+                    gate = min(gate, 12 + float(np.linalg.norm(velocity)) * dt)
                 for column, candidate in enumerate(candidates):
                     if column in blocked:
                         continue

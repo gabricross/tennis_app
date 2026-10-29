@@ -294,7 +294,7 @@ de reserva y separacion por grabaciones/sesiones con derechos adecuados.
 No se promete deteccion perfecta, especialmente con oclusiones o pelotas
 de pocos pixeles.
 
-#### Nueva iteracion: continuidad y sesiones separadas
+#### Iteracion anterior: continuidad y sesiones separadas
 
 Se reprodujo un hueco real de B105: no lo causaba la memoria de reservas,
 sino un candidato antiguo incorrecto que contaminaba la coherencia de
@@ -328,8 +328,9 @@ una medida de precision general. Un control de 196 fotogramas de pista
 vacia no emite posiciones; solo cuatro fotogramas tienen ausencia
 verificada manualmente. Los ambiguos no se cuentan como negativos.
 
-La confusion de septiembre con la zona de la raqueta ya existia antes
-del cambio. Algunas pelotas reales no llegan al umbral neuronal de 0,15.
+La seleccion incorrecta de septiembre ya existia antes del cambio.
+La auditoria posterior la localizo en una pelota estatica junto a la red,
+no en la raqueta. Algunas pelotas reales no llegan al umbral neuronal de 0,15.
 Un experimento posterior completo a 1280 y confianza 0,03 recupera 3/5,
 pero conserva una posicion incorrecta en otro fotograma: **no se activa
 esa politica solo por aumentar cobertura**. Estas sesiones son ya
@@ -343,6 +344,89 @@ MP4 largos historicos. La iteracion pasa **89 pruebas unitarias,
 comparacion se reproducen sincronizados. Los datos y caches siguen
 fuera de Git. Persisten errores de deteccion: no se afirma seguimiento
 perfecto ni se hace fine-tuning con esta muestra insuficiente.
+
+#### Rechazo de transferencias a reservas tras un hueco
+
+Se reprodujo la seleccion incorrecta de septiembre sobre todos sus
+fotogramas originales. Tras tres fotogramas sin deteccion, una reserva
+que acababa de aparecer entre los candidatos quedaba a unos 96 px de la
+prediccion, pero entraba en la puerta de asociacion de hasta 140 px.
+Heredaba asi una trayectoria en movimiento antes de reunir las tres
+observaciones necesarias para confirmar que estaba quieta.
+
+La asociacion de una identidad con al menos tres medidas se limita,
+si han pasado mas de 0,05 s desde su ultima medida, por el menor de su
+margen anterior y **12 px + velocidad observada en px/s por intervalo**.
+Son coordenadas 640 x 360 compensadas por camara, no una velocidad fisica
+de pelota. La adquisicion inicial y los intervalos consecutivos conservan
+su margen anterior. Un candidato rechazado necesita confirmar movimiento
+por su cuenta; no se dibuja una posicion interpolada para cubrir el hueco.
+Se verifican tambien pelotas rapidas a cadencia TrackNet y la confirmacion
+de una identidad nueva tras un cambio grande de direccion.
+
+Sobre las mismas medidas neuronales se repitieron 7244 fotogramas:
+los dos recorridos largos, tres sesiones de diagnostico, el control vacio
+y los diez clips historicos. Se valida SHA-256 por imagen en los caches
+que lo registran; los diez caches historicos no incluian ese hash.
+
+| Revision limitada | Antes | Con el rechazo tras huecos |
+| --- | --- | --- |
+| Ocho posiciones de los recorridos largos | 7 correctas, 0 incorrectas, 1 hueco | Igual |
+| Veinte posiciones de tres sesiones de diagnostico | 10 correctas, 1 incorrecta, 9 huecos | 10 correctas, 0 incorrectas, 10 huecos |
+| Quince posiciones de los diez clips historicos | 11 correctas, 0 incorrectas, 4 huecos | Igual |
+| Cuatro ausencias verificadas del control vacio | 0 salidas | 0 salidas |
+
+Las dos marcas falsas consecutivas sobre la reserva de septiembre
+desaparecen, pero **no se recupera ahi la pelota real**, ausente entre los
+candidatos a este umbral. La cobertura total baja: A pasa de 250 a 242
+observaciones, B de 1252 a 1227 y septiembre de 190 a 181. Hay tambien
+huecos adicionales; no se presenta esa bajada como prueba de que todas
+las observaciones eliminadas fueran falsas. La auditoria conserva cero
+salidas cerca de la reserva conocida de A y los mismos ocho cruces reales
+cerca de la de B. El productor YOLO real, con medidas cacheadas y hashes
+verificados en los 600 fotogramas de septiembre, confirma el rechazo sin
+alterar sus campos de metodo, score o intensidad.
+
+##### Prueba nocturna reservada: resultado insuficiente
+
+Antes de consultar predicciones, se fijaron once posiciones visibles de
+dos vuelos en una sesion no utilizada hasta entonces, enero 28 por la
+noche: recorte de 20 s, 600 fotogramas. Se excluyeron dos estelas de
+exposicion demasiado largas para localizar su centro con la tolerancia
+de 8 px; no se contaron como ausencias. Se conservaron hashes del video,
+etiquetas y productor antes de la inferencia.
+
+**Ambas versiones obtienen 3/11 correctas, 6 incorrectas y 2 huecos.**
+Es un resultado negativo, no una validacion superada. El detector ofrece
+un candidato cercano a la referencia en 10/11 posiciones, pero varias
+selecciones siguen a la raqueta en vez de a la pelota del lanzamiento.
+Ambos objetos tienen apoyo de movimiento: dar prioridad a cualquier
+componente amarillo en movimiento tampoco los distinguiria. La reserva
+tras un hueco y la confusion con una raqueta en movimiento son fallos
+distintos. No se retoca la politica con estas once etiquetas para
+presentarlas despues como un nuevo test ciego.
+
+La correccion pasa 92 pruebas unitarias, sintaxis, 49 comprobaciones API
+y 36 de navegador. El comprobador espera a que exista el control de
+reproduccion de la ventana nueva y exige dos videos preparados: evita
+una carrera de navegacion que antes podia consultar un documento vacio,
+sin cambiar el reproductor ni aumentar sus tiempos de espera.
+
+Se genero tambien una comparacion nueva de 20 s de B por la cola real,
+con inferencia nueva y pista, jugadores y pelota juntos. Ambos MP4 se
+decodifican completos, 600 fotogramas cada uno; las 287 filas observadas
+de pelota y 396 de jugadores coinciden con el JSON. Se conservan B105 y
+B300, la identidad y continuidad de las estelas y los metadatos YOLO.
+No se sustituyen los resultados largos antiguos ni se presenta esta
+exportacion como prueba de precision general.
+
+No se cambian pesos, escalas, umbrales, formulas metricas ni metadatos de
+exportacion. No se afirma seguimiento fiable en video nocturno ni
+ausencia general de confusiones con raquetas. La siguiente mejora necesita
+evidencia de apariencia/identidad que distinga objetos en movimiento,
+ademas de mas material anotado y separado para evaluar ese cambio.
+Videos, imagenes, anotaciones y resultados detallados permanecen fuera
+del repositorio, con la licencia y atribucion originales.
 
 ### Metros y km/h de jugadores (JSON version 3)
 
