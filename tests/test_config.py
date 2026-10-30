@@ -46,11 +46,11 @@ values = dict(clip_id="fixture", start=0, duration=1, mode="complete",
 (MODELS / "people.onnx").touch()
 manager = Mock()
 with patch.object(app, "require_clip", return_value={"metadata":{"duration":2}}), patch.object(app, "manager", manager):
-    for selected, available in [("yolo","ball.onnx"), ("tracknet","ball_yolo.onnx")]:
+    for selected, available in [("yolo","ball.onnx"), ("tracknet","ball_yolo.onnx"), ("yolo_wasb","ball_yolo.onnx")]:
         for path in MODELS.glob("ball*.onnx"):
             path.unlink()
         (MODELS / available).touch()
-        request = app.AnalysisRequest(**values, **({"ball_backend":selected} if selected=="yolo" else {}))
+        request = app.AnalysisRequest(**values, **({"ball_backend":selected} if selected!="tracknet" else {}))
         assert request.ball_backend == selected
         try:
             app.start_job(request)

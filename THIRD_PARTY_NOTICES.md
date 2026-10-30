@@ -51,6 +51,22 @@ High-speed and Tiny Objects in Sports Applications*, AVSS 2019,
   dependencia de su paquete. La inferencia local usa ONNX Runtime y
   preprocesado/decodificacion propios.
 
+## Detector multifotograma opcional: WASB
+
+- Tarashima et al., *Widely Applicable Strong Baseline for Sports Ball
+  Detection and Tracking*, BMVC 2023,
+  [arXiv:2311.05237](https://arxiv.org/abs/2311.05237).
+- Codigo: [nttcom/WASB-SBDT](https://github.com/nttcom/WASB-SBDT), MIT. No se
+  copia en este repositorio: `tools/export_wasb.py` carga su definicion de
+  HRNet desde un clon local indicado por el usuario y transcribe su
+  configuracion `wasb.yaml`.
+- Pesos de tenis (`wasb_tennis_best.pth.tar`): la licencia del checkpoint no
+  esta declarada ([issue #12](https://github.com/nttcom/WASB-SBDT/issues/12),
+  sin respuesta). La app nunca los descarga ni los redistribuye; solo exporta
+  a ONNX los pesos que el usuario ya tenga, con `weights_only=True`, y deja una
+  ficha con sus SHA-256. Uso local de evaluacion; revisa los derechos antes de
+  cualquier distribucion o uso comercial.
+
 ## Multimedia y dependencias
 
 No se incluye video de un partido ni una base de datos personal. Cada persona

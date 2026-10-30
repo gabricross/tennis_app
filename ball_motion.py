@@ -11,6 +11,7 @@ class _BallTrack:
     identity: int
     points: list[tuple[float, np.ndarray]] = field(default_factory=list)
     racket_detections: int = 0
+    last_primary: float | None = None
 
 @dataclass(eq=False)
 class _StationaryCandidate:
@@ -131,6 +132,11 @@ class ActiveBallSelector:
             # A ball meets the racket at one detection frame; a racket head stays inside its box.
             if track.racket_detections >= 2:
                 continue
+            if not candidate.get("secondary"):
+                track.last_primary = timestamp
+            # A secondary detector may only bridge gaps in a track the primary detector saw recently.
+            if track.last_primary is None or timestamp - track.last_primary > 0.5:
+                continue
             motion_points = track.points[-5:]
             if len(motion_points) < 3 or timestamp - motion_points[0][0] < 0.06:
                 continue
@@ -156,6 +162,7 @@ class ActiveBallSelector:
             eligible,
             key=lambda item: (
                 racket_sized(item[1]),
+                bool(item[1].get("secondary")),
                 item[0].identity != self.active_id,
                 -item[1]["intensity"] / 255 - 0.1 * bool(item[1].get("motion_support")),
             ),

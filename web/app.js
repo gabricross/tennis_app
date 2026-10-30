@@ -428,8 +428,8 @@
       message = "Falta el modelo de jugadores. Ejecuta Preparar_Tennis_Lab.ps1.";
     }
     if (state.config && $("#complete-mode").checked) {
-      const key = $("#ball-backend").value === "tracknet" ? "ball" : "ball_yolo";
-      if (!state.config.models[key]) {
+      const keys = {tracknet: ["ball"], yolo_wasb: ["ball_yolo", "ball_wasb"]}[$("#ball-backend").value] ?? ["ball_yolo"];
+      if (!keys.every((key) => state.config.models[key])) {
         ready = false;
         message = "No está instalado el motor de pelota seleccionado. Elige otro o instala sus pesos.";
       }
@@ -794,13 +794,14 @@
     $("#ball-backend option[value=tracknet]").disabled = !state.config.models.ball;
     $("#ball-backend option[value=yolo]").disabled = !state.config.models.ball_yolo;
     $("#ball-backend option[value=yolo_multiscale]").disabled = !state.config.models.ball_yolo;
+    $("#ball-backend option[value=yolo_wasb]").disabled = !(state.config.models.ball_yolo && state.config.models.ball_wasb);
     $("#ball-backend").value = state.config.models.ball_yolo ? "yolo_multiscale" : "tracknet";
     if ($("#complete-mode").disabled) $("#players-mode").checked = true;
     $("#ball-backend").addEventListener("change", updateReadiness);
     $$("input[name=analysis-mode]").forEach((input) => input.addEventListener("change", updateReadiness));
     $("#auto-court").disabled = !state.config.models.court;
     $("#model-list").replaceChildren();
-    for (const [key, label] of [["people", "YOLOX-S · Personas"], ["court", "ResNet50 · Propuesta de pista"], ["ball", "TrackNet · Pelota experimental"], ["ball_yolo", "YOLOv8n tenis · Pelota ligera experimental"]]) {
+    for (const [key, label] of [["people", "YOLOX-S · Personas"], ["court", "ResNet50 · Propuesta de pista"], ["ball", "TrackNet · Pelota experimental"], ["ball_yolo", "YOLOv8n tenis · Pelota ligera experimental"], ["ball_wasb", "WASB HRNet · Pelota multifotograma (pesos locales, licencia no aclarada)"]]) {
       $("#model-list").append(element("li", `${label}: ${state.config.models[key] ? "instalado" : "no disponible"}`));
     }
     await refreshLibrary();

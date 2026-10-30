@@ -10,7 +10,9 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from inference import BallModel, BallObjectDetector, BallTracker, ModelBank, YoloBallModel, ball_candidates
+from inference import (
+    BallModel, BallObjectDetector, BallTracker, ModelBank, WasbBallDetector, YoloBallModel, ball_candidates,
+)
 from engine import draw_frame, summarize
 from court import LENGTH, WIDTH
 from ball_motion import ActiveBallSelector, MotionBallDetector
@@ -59,10 +61,12 @@ class BallTests(unittest.TestCase):
         bank = ModelBank()
         with patch("inference.YoloBallModel") as factory:
             bank.ball_detector("yolo_multiscale")
-            factory.assert_called_once_with(multiscale=True)
+            factory.assert_called_once_with(multiscale=True, wasb=False)
             bank.ball_detector("yolo")
             self.assertEqual(factory.call_count, 2)
-            factory.assert_called_with(multiscale=False)
+            factory.assert_called_with(multiscale=False, wasb=False)
+            bank.ball_detector("yolo_wasb")
+            factory.assert_called_with(multiscale=True, wasb=True)
 
     def test_velocity_selects_forward_ball_not_stronger_old_position(self):
         tracker = BallTracker()
@@ -227,6 +231,22 @@ class YoloBallTests(unittest.TestCase):
         point = model.detect(frames, 3 / 30)
         self.assertAlmostEqual(point["x"], 130)
         self.assertTrue(point["continuous"])
+
+    def test_wasb_heatmap_blob_maps_back_to_secondary_candidate(self):
+        logits = np.full((1, 3, 288, 512), -10, np.float32)
+        logits[0, 2, 99:102, 199:202] = 5
+        network = Mock()
+        network.get_inputs.return_value = [Mock(name="frames")]
+        network.run.return_value = [logits]
+        with patch("inference.session", return_value=network):
+            detector = WasbBallDetector("unused.onnx")
+        frames = deque([np.zeros((720, 1280, 3), np.uint8)] * 3, maxlen=3)
+        [candidate] = detector.candidates(frames)
+        self.assertEqual(network.run.call_args.args[1][network.get_inputs()[0].name].shape, (1, 9, 288, 512))
+        self.assertAlmostEqual(candidate["x"], 250, places=3)
+        self.assertAlmostEqual(candidate["y"], 125, places=3)
+        self.assertTrue(candidate["secondary"])
+        self.assertEqual(detector.candidates(deque(list(frames)[:2])), [])
 
     def test_letterbox_rgb_decode_and_nms(self):
         detector = BallObjectDetector.__new__(BallObjectDetector)
@@ -463,6 +483,39 @@ class ActiveBallTests(unittest.TestCase):
             if index in (3, 4, 5):
                 self.assertIsNone(point)
         self.assertEqual(point["y"], 70)
+
+    def test_secondary_detector_cannot_start_a_track(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(10):
+            point = selector.update([{"x": 100 + 8 * index, "y": 120, "intensity": 240, "secondary": True}],
+                                    index / 30, affine)
+            self.assertIsNone(point)
+
+    def test_secondary_detector_bridges_a_recent_primary_track(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(12):
+            candidate = {"x": 100 + 8 * index, "y": 120, "intensity": 200}
+            if index >= 5:
+                candidate["secondary"] = True
+            point = selector.update([candidate], index / 30, affine)
+            if index in (5, 6):
+                self.assertEqual(point["x"], candidate["x"])
+        # More than 0.5 s after the last primary measurement the bridge ends.
+        self.assertIsNone(selector.update([{"x": 300, "y": 120, "intensity": 200, "secondary": True}],
+                                          0.7, affine))
+
+    def test_primary_detector_outranks_a_secondary_track(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(8):
+            candidates = [{"x": 400 + 10 * index, "y": 100, "intensity": 120}]
+            secondary = {"x": 100 + 2 * index, "y": 200, "intensity": 250}
+            if index >= 3:
+                secondary["secondary"] = True
+            point = selector.update([secondary] + candidates, index / 30, affine)
+        self.assertEqual(point["x"], 470)
 
     def test_long_exposure_streak_is_not_mistaken_for_a_racket(self):
         selector = ActiveBallSelector()

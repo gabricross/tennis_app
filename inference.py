@@ -11,6 +11,8 @@ from court import LENGTH, PLAY_BOUNDS, WIDTH, project, session
 from detection import Detection, PersonDetector
 from ball_motion import ActiveBallSelector, MotionBallDetector
 
+BALL_BACKENDS = ("tracknet", "yolo", "yolo_multiscale", "yolo_wasb")
+
 
 class PlayerSelector:
     def __init__(self) -> None:
@@ -187,6 +189,7 @@ class BallModel:
         self.active = ActiveBallSelector()
         self.identity: int | None = None
         self.last_observation: tuple[float, int] | None = None
+        self.selected: dict | None = None
 
     def observe(self, image: np.ndarray, timestamp: float, candidates: list[dict] | None,
                 rackets: list[tuple[float, float, float, float]] | None = None) -> dict | None:
@@ -199,7 +202,7 @@ class BallModel:
         if rackets is not None:
             scale = np.array([640, 360, 640, 360]) / np.tile(image.shape[1::-1], 2)
             rackets = [tuple(np.asarray(box) * scale) for box in rackets]
-        selected = self.active.update(candidates, timestamp, self.motion.affine, rackets)
+        selected = self.selected = self.active.update(candidates, timestamp, self.motion.affine, rackets)
         identity = selected["track_id"] if selected is not None else self.active.active_id
         if self.motion.affine is None or identity != self.identity:
             self.tracker = BallTracker(allow_reacquisition=True)
@@ -288,20 +291,76 @@ class BallObjectDetector:
         return candidates
 
 
+class WasbBallDetector:
+    """WASB HRNet (Tarashima et al., BMVC 2023) on the last three frames.
+
+    Its tennis checkpoint has no stated licence upstream, so the ONNX file is only ever
+    exported locally from user-supplied weights (tools/export_wasb.py) and never bundled.
+    """
+
+    MEAN = np.array([0.485, 0.456, 0.406], np.float32)
+    STD = np.array([0.229, 0.224, 0.225], np.float32)
+
+    def __init__(self, path, threshold: float = 0.5) -> None:
+        self.net = session(path)
+        self.input_name = self.net.get_inputs()[0].name
+        self.threshold = threshold
+
+    def candidates(self, frames: deque[np.ndarray]) -> list[dict]:
+        if len(frames) < 3:
+            return []
+        height, width = frames[-1].shape[:2]
+        # Upstream preprocessing: width-limited similarity to 512 x 288, RGB, ImageNet statistics.
+        scale = 512 / max(height, width)
+        affine = np.float32([[scale, 0, 256 - scale * width / 2], [0, scale, 144 - scale * height / 2]])
+        blob = np.concatenate([
+            ((cv2.warpAffine(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), affine, (512, 288)).astype(np.float32) / 255
+              - self.MEAN) / self.STD).transpose(2, 0, 1)
+            for frame in list(frames)[-3:]
+        ])[None]
+        logits = self.net.run(None, {self.input_name: blob})[0]
+        if logits.shape != (1, 3, 288, 512):
+            raise ValueError(f"Unexpected WASB output: {logits.shape}")
+        heat = 1 / (1 + np.exp(-logits[0, 2]))
+        count, labels = cv2.connectedComponents((heat > self.threshold).astype(np.uint8))
+        inverse = cv2.invertAffineTransform(affine)
+        candidates = []
+        for label in range(1, count):
+            ys, xs = np.nonzero(labels == label)
+            weights = heat[ys, xs]
+            x, y = inverse @ [float(xs @ weights / weights.sum()), float(ys @ weights / weights.sum()), 1]
+            if 0 <= x < width and 0 <= y < height:
+                candidates.append({"x": float(x) / width * 640, "y": float(y) / height * 360,
+                                   "intensity": float(weights.max()) * 255, "secondary": True})
+        return candidates
+
+
 class YoloBallModel(BallModel):
-    def __init__(self, *, multiscale: bool = False) -> None:
+    secondary: WasbBallDetector | None = None
+
+    def __init__(self, *, multiscale: bool = False, wasb: bool = False) -> None:
         self.detector = BallObjectDetector(MODELS / "ball_yolo.onnx", multiscale=multiscale)
+        self.secondary = WasbBallDetector(MODELS / "ball_wasb.onnx") if wasb else None
         self.reset()
 
     def detect(self, frames: deque[np.ndarray], timestamp: float, *, infer: bool = True,
                rackets: list[tuple[float, float, float, float]] | None = None) -> dict | None:
         image = frames[-1]
         candidates = self.detector.candidates(image)
+        if self.secondary is not None:
+            candidates += [
+                candidate for candidate in self.secondary.candidates(frames)
+                if not any(np.hypot(candidate["x"] - other["x"], candidate["y"] - other["y"]) <= 3
+                           for other in candidates)
+            ]
         point = self.observe(image, timestamp, candidates, rackets)
         if point is not None:
             point["detector_score"] = point["intensity"] / 255
             point["intensity"] = None
-            point["method"] = "YOLOv8n + temporal association"
+            point["method"] = (
+                "WASB HRNet + temporal association" if self.selected and self.selected.get("secondary")
+                else "YOLOv8n + temporal association"
+            )
         return point
 
 
@@ -318,10 +377,12 @@ class ModelBank:
         return self.people
 
     def ball_detector(self, backend: str = "tracknet") -> BallModel | YoloBallModel:
-        if backend not in ("tracknet", "yolo", "yolo_multiscale"):
+        if backend not in BALL_BACKENDS:
             raise ValueError("Unknown ball backend.")
         if self.ball is None or backend != self.ball_backend:
-            self.ball = BallModel() if backend == "tracknet" else YoloBallModel(multiscale=backend == "yolo_multiscale")
+            self.ball = BallModel() if backend == "tracknet" else YoloBallModel(
+                multiscale=backend in ("yolo_multiscale", "yolo_wasb"), wasb=backend == "yolo_wasb",
+            )
             self.ball_backend = backend
         self.ball.reset()
         return self.ball

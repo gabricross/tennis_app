@@ -37,7 +37,7 @@ def parse_arguments() -> VerificationConfig:
     parser.add_argument("--start", type=float, default=0)
     parser.add_argument("--players-only", action="store_true", help="Validate a light installation without court or ball models.")
     parser.add_argument("--calibration-reference", choices=("doubles", "service_boxes", "service_left", "service_right"), default="doubles")
-    parser.add_argument("--ball-backend", choices=("tracknet", "yolo", "yolo_multiscale"), default="tracknet")
+    parser.add_argument("--ball-backend", choices=("tracknet", "yolo", "yolo_multiscale", "yolo_wasb"), default="tracknet")
     parser.add_argument("--corners", type=float, nargs=8, metavar="XY",
                         help="Four normalized outer corners, clockwise from the far-left corner.")
     arguments = parser.parse_args()

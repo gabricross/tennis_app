@@ -57,7 +57,7 @@ class AnalysisRequest(BaseModel):
     mode: str = "players"
     corners: list[list[float]]
     calibration_reference: Literal["doubles", "service_boxes", "service_left", "service_right"] = "doubles"
-    ball_backend: Literal["tracknet", "yolo", "yolo_multiscale"] = "tracknet"
+    ball_backend: Literal["tracknet", "yolo", "yolo_multiscale", "yolo_wasb"] = "tracknet"
 
     @model_validator(mode="after")
     def valid_configuration(self):
@@ -240,7 +240,7 @@ def configuration():
         "app": "TennisLab", "version": "1.0", "token": TOKEN,
         "max_upload_mb": MAX_UPLOAD_BYTES // 1024 // 1024,
         "max_analysis_seconds": MAX_ANALYSIS_SECONDS,
-        "models": {name: (MODELS / f"{name}.onnx").exists() for name in ("people", "court", "ball", "ball_yolo")},
+        "models": {name: (MODELS / f"{name}.onnx").exists() for name in ("people", "court", "ball", "ball_yolo", "ball_wasb")},
         "storage": str(DATA), "private_local_storage": True,
         "previous_demo_available": EXAMPLE_VIDEO.is_file(),
         "court": {
@@ -380,8 +380,9 @@ def start_job(configuration: AnalysisRequest):
         raise HTTPException(422, "El fragmento termina después del vídeo.")
     if not (MODELS / "people.onnx").exists():
         raise HTTPException(503, "Falta el modelo de jugadores. Ejecuta la preparación de modelos.")
-    ball_file = "ball.onnx" if configuration.ball_backend == "tracknet" else "ball_yolo.onnx"
-    if configuration.mode == "complete" and not (MODELS / ball_file).exists():
+    ball_files = {"tracknet": ["ball.onnx"], "yolo_wasb": ["ball_yolo.onnx", "ball_wasb.onnx"]}.get(
+        configuration.ball_backend, ["ball_yolo.onnx"])
+    if configuration.mode == "complete" and not all((MODELS / name).exists() for name in ball_files):
         raise HTTPException(503, "Falta el modelo de pelota seleccionado. Elige otro motor o instala sus pesos.")
     if manager is None:
         raise HTTPException(503, "El motor todavía no está preparado.")

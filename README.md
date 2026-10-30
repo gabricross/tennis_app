@@ -513,11 +513,57 @@ estas sesiones: no es una validacion ciega. Con los modelos reales y el
 orden del motor, sin caches, la sesion nocturna reproduce el replay en
 los 100 fotogramas comparados.
 
-Siguen pendientes la pelota bloqueada en el apice del lanzamiento y una
-comparacion con detectores multi-fotograma como WASB o TrackNetV3. Los
-pesos de tenis de WASB estan en Google Drive, bloqueado por la red
-corporativa usada, y su licencia de pesos no esta aclarada. La iteracion
-pasa 100 pruebas unitarias, 49 comprobaciones API y 36 de navegador.
+Sigue pendiente la pelota bloqueada en el apice del lanzamiento. La
+iteracion pasa 100 pruebas unitarias, 49 comprobaciones API y 36 de
+navegador.
+
+#### Motor opcional YOLO + WASB
+
+WASB (Tarashima et al., BMVC 2023) detecta la pelota con tres fotogramas
+consecutivos. Sus pesos de tenis no tienen licencia declarada: la app no
+los descarga. `tools/export_wasb.py --repo <clon WASB-SBDT> --weights
+<checkpoint>` los convierte localmente a ONNX y comprueba la conversion
+(diferencia maxima de logits 6e-6). El motor `yolo_wasb` solo aparece si
+existe ese archivo.
+
+En 54 posiciones visibles etiquetadas, YOLO ofrece un candidato a 8 px o
+menos en 44; WASB, con umbral 0,5, en 26. Son complementarios: WASB
+encuentra las cinco de septiembre que YOLO no ve. Una union directa
+anadia errores (por ejemplo coches tras la valla, porque WASB responde al
+movimiento). Por eso WASB es una **fuente secundaria**: no puede iniciar
+ni confirmar una trayectoria, solo rellenar huecos de una que YOLO ha
+visto en los ultimos 0,5 s, y queda por detras de cualquier trayectoria
+YOLO elegible.
+
+| Revision limitada | YOLO multiescala | YOLO + WASB |
+| --- | --- | --- |
+| Ocho posiciones de los recorridos largos | 7 correctas, 0 incorrectas, 1 hueco | Igual |
+| Veinte posiciones de tres sesiones de diagnostico | 10 correctas, 0 incorrectas, 10 huecos | **16 correctas, 0 incorrectas, 4 huecos** |
+| Quince posiciones de los diez clips historicos | 11 correctas, 0 incorrectas, 4 huecos | Igual |
+| Once posiciones nocturnas (diagnostico) | 7 correctas, 1 incorrecta, 3 huecos | Igual |
+| Control de octubre sin juego | 28 salidas falsas | 29 salidas falsas, 0 en ausencias verificadas |
+
+Las observaciones suben en A de 241 a 359, en B de 1215 a 1452 y en
+septiembre de 181 a 265. Una muestra revisada en imagen son sobre todo
+pelotas reales, muchas pequenas y lejanas junto a la red; algunas son
+dudosas. No es una medida de precision. Cada observacion conserva su
+metodo en JSON/CSV ("WASB HRNet + temporal association"). Con los modelos
+reales y el orden del motor, septiembre localiza las cinco posiciones a
+menos de 1 px; coincide con el replay (WASB en PyTorch) en 62 de 65
+fotogramas.
+
+El coste en este portatil (Ryzen 5 7530U, sin GPU dedicada) es de unos
+0,84 s por fotograma solo para la pelota; WASB en ONNX aporta unos 0,4 s.
+Es un modo de posprocesado, no de tiempo real. Las sesiones usadas ya no
+son ciegas para esta decision.
+
+Tambien se probo bloquear la pelota quieta tras 0,2 s en lugar de 0,06 s,
+para no perderla en el apice del lanzamiento. Mejora dos posiciones
+etiquetadas, pero la revision en imagen muestra raquetas lejanas y partes
+del jugador cercano que antes quedaban bloqueadas: **no se adopta**.
+
+La iteracion pasa 104 pruebas unitarias; 49 comprobaciones API y 36 de
+navegador con cada motor YOLO.
 
 ### Metros y km/h de jugadores (JSON version 3)
 

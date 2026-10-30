@@ -219,7 +219,7 @@ def summarize(samples: list[dict], mode: str, duration: float, elapsed: float,
         "ball_methods": {
             method: sum(s["ball"] is not None and s["ball"].get("method") == method for s in ball_series)
             for method in ("TrackNet + temporal association", "bidirectional optical flow",
-                           "YOLOv8n + temporal association")
+                           "YOLOv8n + temporal association", "WASB HRNet + temporal association")
         } if mode == "complete" else {},
         "processing_seconds": elapsed, "mode": mode, "warnings": warnings,
         "metrics_note": "Cobertura = muestras observadas / muestras analizadas; pelota por fotograma, "
