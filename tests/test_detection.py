@@ -33,6 +33,19 @@ class DetectionTests(unittest.TestCase):
         np.testing.assert_allclose(result[0].box, (240, 160, 400, 480), atol=0.001)
         self.assertAlmostEqual(result[0].confidence, 0.72, places=5)
 
+    def test_one_forward_pass_decodes_people_and_coco_rackets(self):
+        output = np.zeros((1, 8400, 85), np.float32)
+        output[0, 0, :6] = [20, 20, np.log(10), np.log(20), 0.9, 0.8]
+        output[0, 1, :5] = [30, 10, np.log(2), np.log(2), 0.5]
+        output[0, 1, 5 + 38] = 0.4
+        detector, network = self.make_detector(output)
+        people, rackets = detector.detect_with_rackets(np.zeros((720, 1280, 3), np.uint8))
+        self.assertEqual(network.forward.call_count, 1)
+        self.assertEqual(len(people), 1)
+        self.assertEqual(len(rackets), 1)
+        np.testing.assert_allclose(rackets[0].box, (480, 144, 512, 176), atol=0.001)
+        self.assertAlmostEqual(rackets[0].confidence, 0.2, places=5)
+
     def test_unexpected_model_output_is_an_explicit_error(self):
         detector, _ = self.make_detector(np.zeros((1, 10, 8), np.float32))
         with self.assertRaisesRegex(ValueError, "Unexpected YOLOX"):

@@ -248,7 +248,7 @@ def analyze_clip(
     matrix = court_matrix(settings["corners"], (width, height), reference)
     selector = PlayerSelector()
     people = models.person_detector()
-    initial_detections = people.detect(frame)
+    initial_detections, initial_rackets = people.detect_with_rackets(frame)
     camera = CourtCamera(
         frame, matrix, allow_partial=reference != "doubles",
         boxes=[detection.box for detection in initial_detections],
@@ -269,15 +269,22 @@ def analyze_clip(
                 raise RuntimeError("El vídeo normalizado se interrumpió durante el análisis.")
         frames.append(frame.copy())
         timestamp = index / FPS
-        point = ball.detect(frames, timestamp, infer=index % 3 == 2) if ball else None
+        detected = not index % stride or index == total - 1
+        detections, rackets = (
+            (initial_detections, initial_rackets) if index == 0
+            else people.detect_with_rackets(frame) if detected else (None, None)
+        )
+        point = ball.detect(
+            frames, timestamp, infer=index % 3 == 2,
+            rackets=None if rackets is None else [racket.box for racket in rackets],
+        ) if ball else None
         if ball_samples is not None:
             ball_samples.append({"time": round(timestamp, 6), "frame": index, "ball": point})
-        if index % stride and index != total - 1:
+        if not detected:
             state = camera.update(frame, previous_boxes)
             matrix = state.matrix
             camera_continuous = camera_continuous and state.valid
             continue
-        detections = initial_detections if index == 0 else people.detect(frame)
         if index == 0:
             valid, reason, support = True, "Calibración confirmada por el usuario", camera.initial_support
         else:

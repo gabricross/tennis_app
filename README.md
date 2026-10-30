@@ -480,6 +480,45 @@ la seleccion incorrecta de septiembre era una pelota quieta tras la red.
 La iteracion pasa 95 pruebas unitarias, 49 comprobaciones API y 36 de
 navegador. No se cambian pesos, umbrales neuronales ni metricas.
 
+#### Raquetas detectadas por YOLOX
+
+Otros sistemas de deportes de raqueta detectan la raqueta como clase
+propia (por ejemplo PadelOptic con RF-DETR). El detector de personas ya
+incluido, YOLOX-S de OpenCV Zoo (Apache-2.0, COCO), tiene la clase
+"tennis racket"; la app solo leia la de persona. Ahora ambas salen de la
+**misma pasada**, cada tres fotogramas, antes de seleccionar la pelota.
+
+Una trayectoria queda fuera de la seleccion si su candidato cae dentro
+de una caja de raqueta (confianza al menos 0,1) en **dos detecciones
+consecutivas** y su lado corto ocupa al menos el 30 % del lado corto de
+esa caja. Una pelota real coincide con la raqueta en el golpe, una sola
+deteccion; la cabeza amarilla confundida con pelota permanece dentro. La
+marca se reevalua en cada deteccion. Un primer intento sin persistencia
+eliminaba sobre todo pelotas reales en el golpe en los recorridos largos y
+perdia dos posiciones historicas; se descarto tras revisarlo en imagen.
+
+| Revision limitada | Antes | Con cajas de raqueta |
+| --- | --- | --- |
+| Ocho posiciones de los recorridos largos | 7 correctas, 0 incorrectas, 1 hueco | Igual |
+| Veinte posiciones de tres sesiones de diagnostico | 10 correctas, 0 incorrectas, 10 huecos | Igual |
+| Quince posiciones de los diez clips historicos | 11 correctas, 0 incorrectas, 4 huecos | Igual |
+| Once posiciones nocturnas (consumidas, diagnostico) | 7 correctas, 2 incorrectas, 2 huecos | 7 correctas, 1 incorrecta, 3 huecos |
+| Control de octubre sin juego, 960 fotogramas | 110 salidas falsas, 2 en ausencias verificadas | **28 salidas falsas, 0 en ausencias verificadas** |
+
+La cobertura baja poco: A de 242 a 241 observaciones, B de 1227 a 1215,
+C de 189 a 185 y un historico de 42 a 39. La revision visual muestra en
+su mayoria pelotas sostenidas contra la raqueta o en la mano entre puntos;
+algun caso podria ser un golpe real. Los umbrales se eligieron viendo
+estas sesiones: no es una validacion ciega. Con los modelos reales y el
+orden del motor, sin caches, la sesion nocturna reproduce el replay en
+los 100 fotogramas comparados.
+
+Siguen pendientes la pelota bloqueada en el apice del lanzamiento y una
+comparacion con detectores multi-fotograma como WASB o TrackNetV3. Los
+pesos de tenis de WASB estan en Google Drive, bloqueado por la red
+corporativa usada, y su licencia de pesos no esta aclarada. La iteracion
+pasa 100 pruebas unitarias, 49 comprobaciones API y 36 de navegador.
+
 ### Metros y km/h de jugadores (JSON version 3)
 
 La pista usa 23,77 x 10,97 m. **Las lineas de saque estan a 6,40 m de la

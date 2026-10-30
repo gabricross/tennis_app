@@ -167,9 +167,12 @@ def worker(identifier: str, calibration: Path, output: Path, backend: str) -> No
                 raise RuntimeError("Truncated normalized benchmark video.")
             frames.append(image)
             timestamp = index / FPS
-            point = ball.detect(frames, timestamp, infer=index % 3 == 2)
+            rackets = None
             if index % 3 == 0:
-                person_counts.append(len(people.detect(image)))
+                detected, rackets = people.detect_with_rackets(image)
+                person_counts.append(len(detected))
+            point = ball.detect(frames, timestamp, infer=index % 3 == 2,
+                                rackets=None if rackets is None else [racket.box for racket in rackets])
             samples.append({
                 "frame": index, "time": timestamp, "ball": point, "players": [],
                 "camera_valid": False, "matrix": None,

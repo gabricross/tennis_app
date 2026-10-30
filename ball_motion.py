@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 class _BallTrack:
     identity: int
     points: list[tuple[float, np.ndarray]] = field(default_factory=list)
+    racket_detections: int = 0
 
 @dataclass(eq=False)
 class _StationaryCandidate:
@@ -30,8 +31,9 @@ class ActiveBallSelector:
         self.stationary: list[tuple[float, np.ndarray]] = []
         self.stationary_candidates: list[_StationaryCandidate] = []
 
-    def update(self, candidates: list[dict] | None, timestamp: float,
-               affine: np.ndarray | None) -> dict | None:
+    def update(self, candidates: list[dict] | None, timestamp: float, affine: np.ndarray | None,
+               rackets: list[tuple[float, float, float, float]] | None = None) -> dict | None:
+        """Rackets are detector boxes in candidate coordinates, or None on frames without detection."""
         if self.timestamp is not None and timestamp <= self.timestamp:
             raise ValueError("Ball candidate timestamps must increase.")
         self.timestamp = timestamp
@@ -118,6 +120,17 @@ class ActiveBallSelector:
                 self.tracks.append(track)
             position = np.array([candidate["x"], candidate["y"]], np.float64)
             track.points.append((timestamp, position))
+            if rackets is not None:
+                # A detected racket head fills much of the racket box; a real ball is small inside it.
+                side = min(candidate.get("width", np.inf), candidate.get("height", np.inf))
+                inside = any(
+                    x1 <= position[0] <= x2 and y1 <= position[1] <= y2 and side >= 0.3 * min(x2 - x1, y2 - y1)
+                    for x1, y1, x2, y2 in rackets
+                )
+                track.racket_detections = track.racket_detections + 1 if inside else 0
+            # A ball meets the racket at one detection frame; a racket head stays inside its box.
+            if track.racket_detections >= 2:
+                continue
             motion_points = track.points[-5:]
             if len(motion_points) < 3 or timestamp - motion_points[0][0] < 0.06:
                 continue

@@ -188,14 +188,18 @@ class BallModel:
         self.identity: int | None = None
         self.last_observation: tuple[float, int] | None = None
 
-    def observe(self, image: np.ndarray, timestamp: float, candidates: list[dict] | None) -> dict | None:
+    def observe(self, image: np.ndarray, timestamp: float, candidates: list[dict] | None,
+                rackets: list[tuple[float, float, float, float]] | None = None) -> dict | None:
         moving = self.motion.candidates(image)
         for candidate in candidates or []:
             candidate["motion_support"] = any(
                 np.hypot(candidate["x"] - other["x"], candidate["y"] - other["y"]) <= 8
                 for other in moving
             )
-        selected = self.active.update(candidates, timestamp, self.motion.affine)
+        if rackets is not None:
+            scale = np.array([640, 360, 640, 360]) / np.tile(image.shape[1::-1], 2)
+            rackets = [tuple(np.asarray(box) * scale) for box in rackets]
+        selected = self.active.update(candidates, timestamp, self.motion.affine, rackets)
         identity = selected["track_id"] if selected is not None else self.active.active_id
         if self.motion.affine is None or identity != self.identity:
             self.tracker = BallTracker(allow_reacquisition=True)
@@ -224,11 +228,12 @@ class BallModel:
         blob = blob.transpose(2, 0, 1)[None].copy()
         return self.net.run(None, {self.input_name: blob})[0][0]
 
-    def detect(self, frames: deque[np.ndarray], timestamp: float, *, infer: bool = True) -> dict | None:
+    def detect(self, frames: deque[np.ndarray], timestamp: float, *, infer: bool = True,
+               rackets: list[tuple[float, float, float, float]] | None = None) -> dict | None:
         if len(frames) < 3:
-            return self.observe(frames[-1], timestamp, [])
+            return self.observe(frames[-1], timestamp, [], rackets)
         candidates = ball_candidates(self.heatmap(frames)) if infer else None
-        return self.observe(frames[-1], timestamp, candidates)
+        return self.observe(frames[-1], timestamp, candidates, rackets)
 
 
 class BallObjectDetector:
@@ -288,10 +293,11 @@ class YoloBallModel(BallModel):
         self.detector = BallObjectDetector(MODELS / "ball_yolo.onnx", multiscale=multiscale)
         self.reset()
 
-    def detect(self, frames: deque[np.ndarray], timestamp: float, *, infer: bool = True) -> dict | None:
+    def detect(self, frames: deque[np.ndarray], timestamp: float, *, infer: bool = True,
+               rackets: list[tuple[float, float, float, float]] | None = None) -> dict | None:
         image = frames[-1]
         candidates = self.detector.candidates(image)
-        point = self.observe(image, timestamp, candidates)
+        point = self.observe(image, timestamp, candidates, rackets)
         if point is not None:
             point["detector_score"] = point["intensity"] / 255
             point["intensity"] = None

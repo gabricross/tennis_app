@@ -423,6 +423,47 @@ class ActiveBallTests(unittest.TestCase):
                 self.assertEqual(point["width"], 14)
         self.assertEqual((point["x"], point["width"]), (264, 6))
 
+    def test_detected_racket_box_excludes_a_lone_racket_track(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(12):
+            x, y = 200 + 4 * index, 150 + 2 * index
+            rackets = [(x - 8, y - 8, x + 8, y + 8)] if index % 3 == 0 else None
+            point = selector.update([{"x": x, "y": y, "intensity": 220}], index / 30, affine, rackets)
+            if index >= 3:
+                self.assertIsNone(point)
+
+    def test_ball_touching_the_racket_at_one_detection_stays_eligible(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(8):
+            x = 100 + 12 * index
+            rackets = [(x - 10, 90, x + 10, 110)] if index == 3 else [] if index % 3 == 0 else None
+            point = selector.update([{"x": x, "y": 100, "intensity": 220}], index / 30, affine, rackets)
+            if index >= 2:
+                self.assertIsNotNone(point)
+
+    def test_small_ball_inside_an_oversized_racket_box_stays_eligible(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(6):
+            point = selector.update(
+                [{"x": 420 + 3 * index, "y": 290 + 2 * index, "width": 5, "height": 5, "intensity": 200}],
+                index / 30, affine, [(405, 250, 555, 312)] if index % 3 == 0 else None,
+            )
+        self.assertIsNotNone(point)
+
+    def test_ball_leaving_the_racket_box_becomes_eligible_again(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(7):
+            rackets = [(190, 100, 215, 140)] if index % 3 == 0 else None
+            point = selector.update([{"x": 200, "y": 130 - 10 * index, "intensity": 220}],
+                                    index / 30, affine, rackets)
+            if index in (3, 4, 5):
+                self.assertIsNone(point)
+        self.assertEqual(point["y"], 70)
+
     def test_long_exposure_streak_is_not_mistaken_for_a_racket(self):
         selector = ActiveBallSelector()
         affine = np.float64([[1, 0, 0], [0, 1, 0]])

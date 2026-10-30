@@ -8,6 +8,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 Image = NDArray[np.uint8]
+RACKET_CLASS = 38  # COCO "tennis racket"
+RACKET_CONFIDENCE = 0.1
 
 
 @dataclass(frozen=True)
@@ -41,7 +43,7 @@ class PersonDetector:
         self.grid = np.concatenate(grids).astype(np.float32)
         self.strides = np.concatenate(scales).astype(np.float32)
 
-    def _crop_detections(self, image: Image, offset_x: int = 0) -> list[Detection]:
+    def _forward(self, image: Image) -> tuple[np.ndarray, float]:
         height, width = image.shape[:2]
         if height == 0 or width == 0:
             raise ValueError("Cannot detect people in an empty image.")
@@ -53,8 +55,13 @@ class PersonDetector:
         output = self.net.forward()[0]
         if output.shape != (8400, 85):
             raise ValueError(f"Unexpected YOLOX output shape: {output.shape}")
-        scores = output[:, 4] * output[:, 5]
-        keep = scores >= self.confidence
+        return output, ratio
+
+    def _decode(self, output: np.ndarray, ratio: float, shape: tuple[int, ...], column: int,
+                confidence: float, min_height: float) -> list[Detection]:
+        height, width = shape[:2]
+        scores = output[:, 4] * output[:, column]
+        keep = scores >= confidence
         raw = output[keep]
         centers = (raw[:, :2] + self.grid[keep]) * self.strides[keep]
         sizes = np.exp(raw[:, 2:4]) * self.strides[keep]
@@ -64,23 +71,25 @@ class PersonDetector:
             x1, y1, x2, y2 = box
             x1, x2 = np.clip((x1, x2), 0, width - 1)
             y1, y2 = np.clip((y1, y2), 0, height - 1)
-            if x2 - x1 < 4 or y2 - y1 < 12:
+            if x2 - x1 < 4 or y2 - y1 < min_height:
                 continue
-            results.append(Detection(
-                (float(x1 + offset_x), float(y1), float(x2 + offset_x), float(y2)),
-                float(score),
-            ))
-        return results
+            results.append(Detection((float(x1), float(y1), float(x2), float(y2)), float(score)))
+        if not results:
+            return []
+        indices = cv2.dnn.NMSBoxes(
+            [[d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]] for d in results],
+            [d.confidence for d in results], confidence, 0.5,
+        )
+        return [results[int(i)] for i in np.asarray(indices).reshape(-1)]
 
     def detect(self, image: Image) -> list[Detection]:
-        detections = self._crop_detections(image)
-        if not detections:
-            return []
-        boxes = [
-            [d.box[0], d.box[1], d.box[2] - d.box[0], d.box[3] - d.box[1]]
-            for d in detections
-        ]
-        indices = cv2.dnn.NMSBoxes(
-            boxes, [d.confidence for d in detections], self.confidence, 0.5
+        output, ratio = self._forward(image)
+        return self._decode(output, ratio, image.shape, 5, self.confidence, 12)
+
+    def detect_with_rackets(self, image: Image) -> tuple[list[Detection], list[Detection]]:
+        """People plus COCO 'tennis racket' boxes from the same forward pass."""
+        output, ratio = self._forward(image)
+        return (
+            self._decode(output, ratio, image.shape, 5, self.confidence, 12),
+            self._decode(output, ratio, image.shape, 5 + RACKET_CLASS, RACKET_CONFIDENCE, 4),
         )
-        return [detections[int(i)] for i in np.asarray(indices).reshape(-1)]
