@@ -428,6 +428,58 @@ ademas de mas material anotado y separado para evaluar ese cambio.
 Videos, imagenes, anotaciones y resultados detallados permanecen fuera
 del repositorio, con la licencia y atribucion originales.
 
+#### Raqueta frente a pelota: tamano de la caja YOLO
+
+La traza del fallo nocturno muestra que la trayectoria de la pelota del
+lanzamiento ya era elegible desde varios fotogramas antes; la cabeza
+amarilla de la raqueta conservaba la identidad activa. En la revision
+raw la raqueta mide 10,6-13,9 px de lado corto y la pelota 4,1-6,5 px
+(coordenadas 640 x 360). Es un diagnostico sobre una sesion ya consumida.
+
+El detector YOLO conserva ahora ancho y alto de cada caja. Entre
+trayectorias ya elegibles se relega un candidato **redondeado** (lado
+largo hasta 1,5 veces el corto), con **al menos 10 px** de lado corto y
+**mas del doble** del menor lado corto elegible del mismo fotograma.
+Despues siguen la identidad activa y la intensidad. Los candidatos sin
+tamano (TrackNet, componente de movimiento) no cambian. La exportacion
+no anade campos.
+
+Una primera regla solo relativa (doble del menor) cambiaba dos selecciones
+sin etiqueta que la revision visual considera retrocesos: una estela
+nocturna de 40 x 11,5 px y una pelota cercana de 8,5 x 8,3 px frente a un
+objeto lejano de 4,0 px. **Los umbrales de forma y tamano se fijaron
+despues de ver esos casos y la sesion nocturna**: no hay validacion ciega.
+
+Se repitio la inferencia YOLO multiescala con tamanos sobre 7844
+fotogramas; posiciones e intensidades coinciden con los caches anteriores
+en todos ellos.
+
+| Revision limitada | Antes | Con la regla de tamano |
+| --- | --- | --- |
+| Ocho posiciones de los recorridos largos | 7 correctas, 0 incorrectas, 1 hueco | Igual |
+| Veinte posiciones de tres sesiones de diagnostico | 10 correctas, 0 incorrectas, 10 huecos | Igual |
+| Quince posiciones de los diez clips historicos | 11 correctas, 0 incorrectas, 4 huecos | Igual |
+| Once posiciones nocturnas (consumidas, diagnostico) | 3 correctas, 6 incorrectas, 2 huecos | 7 correctas, 2 incorrectas, 2 huecos |
+
+Fuera de la sesion nocturna y del control negativo siguiente, ninguna
+seleccion cambia en ningun fotograma. Quedan en la nocturna dos fallos de
+otra naturaleza: en el apice del lanzamiento la pelota se mueve menos de
+1,2 px por fotograma y la memoria estacionaria la bloquea; en otra
+posicion el detector no ofrece candidato.
+
+La sesion de octubre 16 no tiene juego en sus dos grabaciones: una
+persona recorre la pista con una raqueta amarilla en alto. Se congelaron
+32 ausencias revisadas en raw (4-36 s, 960 fotogramas) con hash antes de
+inferir. **Ambas versiones emiten 110 observaciones falsas**, unas 95 sobre
+la cabeza de la raqueta, 2 en fotogramas de ausencia verificada. La regla
+solo actua si hay una pelota mas pequena con la que comparar; descartar
+una raqueta aislada necesita una escala absoluta, por ejemplo la caja del
+jugador, o evidencia de apariencia. La revision raw confirma tambien que
+la seleccion incorrecta de septiembre era una pelota quieta tras la red.
+
+La iteracion pasa 95 pruebas unitarias, 49 comprobaciones API y 36 de
+navegador. No se cambian pesos, umbrales neuronales ni metricas.
+
 ### Metros y km/h de jugadores (JSON version 3)
 
 La pista usa 23,77 x 10,97 m. **Las lineas de saque estan a 6,40 m de la

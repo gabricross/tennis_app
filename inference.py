@@ -273,10 +273,12 @@ class BallObjectDetector:
         indices = cv2.dnn.NMSBoxes(boxes.tolist(), values[:, 4].tolist(), self.confidence, 0.4)
         candidates = []
         for index in np.asarray(indices).reshape(-1):
-            x, y, _, _, score = values[int(index)]
+            x, y, box_width, box_height, score = values[int(index)]
             x, y = (float(x) - left) / ratio, (float(y) - top) / ratio
             if 0 <= x < width and 0 <= y < height:
                 candidates.append({"x": x / width * 640, "y": y / height * 360,
+                                   "width": float(box_width) / ratio / width * 640,
+                                   "height": float(box_height) / ratio / height * 360,
                                    "intensity": float(score) * 255})
         return candidates
 

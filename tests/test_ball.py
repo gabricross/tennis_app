@@ -410,6 +410,39 @@ class ActiveBallTests(unittest.TestCase):
         self.assertIsNone(point)
         self.assertTrue(selector.stationary)
 
+    def test_moving_racket_head_does_not_keep_the_ball_identity(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(10):
+            candidates = [{"x": 280 + 3 * index, "y": 150 + 3 * index, "width": 14, "height": 13,
+                           "intensity": 190}]
+            if index >= 3:
+                candidates.append({"x": 264, "y": 120 - 4 * index, "width": 6, "height": 6, "intensity": 145})
+            point = selector.update(candidates, index / 30, affine)
+            if index == 4:
+                self.assertEqual(point["width"], 14)
+        self.assertEqual((point["x"], point["width"]), (264, 6))
+
+    def test_long_exposure_streak_is_not_mistaken_for_a_racket(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(6):
+            point = selector.update([
+                {"x": 100 + 40 * index, "y": 200, "width": 40, "height": 11.5, "intensity": 180},
+                {"x": 400, "y": 100 + 3 * index, "width": 4.2, "height": 4.1, "intensity": 120},
+            ], index / 30, affine)
+        self.assertEqual(point["x"], 300)
+
+    def test_nearer_ball_is_not_mistaken_for_a_racket(self):
+        selector = ActiveBallSelector()
+        affine = np.float64([[1, 0, 0], [0, 1, 0]])
+        for index in range(6):
+            point = selector.update([
+                {"x": 430, "y": 120 - 18 * index, "width": 8.5, "height": 8.3, "intensity": 180},
+                {"x": 570 + 1.5 * index, "y": 188, "width": 4.2, "height": 4.0, "intensity": 120},
+            ], index / 30, affine)
+        self.assertEqual(point["x"], 430)
+
     def test_camera_loss_discards_stationary_memory(self):
         selector = ActiveBallSelector()
         still = np.float64([[1, 0, 0], [0, 1, 0]])

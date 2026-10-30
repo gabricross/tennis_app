@@ -130,9 +130,19 @@ class ActiveBallSelector:
             eligible.append((track, candidate))
         if not eligible:
             return None
+        # A yellow racket head is a large round box beside a much smaller moving ball; blur streaks are elongated.
+        sizes = [min(item[1]["width"], item[1]["height"]) for item in eligible if "width" in item[1]]
+
+        def racket_sized(candidate: dict) -> bool:
+            if "width" not in candidate:
+                return False
+            short, long = sorted((candidate["width"], candidate["height"]))
+            return short >= 10 and long <= 1.5 * short and short > 2 * min(sizes)
+
         track, candidate = min(
             eligible,
             key=lambda item: (
+                racket_sized(item[1]),
                 item[0].identity != self.active_id,
                 -item[1]["intensity"] / 255 - 0.1 * bool(item[1].get("motion_support")),
             ),
