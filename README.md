@@ -1026,3 +1026,11 @@ Se excluyen explicitamente grabaciones, resultados, bases de datos, pesos,
 entornos virtuales, archivos `.env`, accesos directos con rutas personales e
 informes privados de verificacion. No se publica una instancia del servidor
 ni se configura ningun servicio de pago.
+
+La [pagina de ejemplo](https://gabricross.github.io/tennis_app/) es estatica:
+no permite subir videos ni ejecuta el motor Python. Muestra el original
+y el analisis de un fragmento CalTennis de 20 segundos, adjuntos a la
+[release de ejemplos](https://github.com/gabricross/tennis_app/releases/tag/ejemplo-v1),
+no al historial Git. Se conserva la atribucion y la licencia CC BY-NC 4.0
+del material; es una demostracion tecnica no comercial, no una
+certificacion de precision ni una grabacion propia de Tennis Lab.

@@ -23,27 +23,31 @@
 </head>
 <body>
   <main>
-    <p class="eyebrow">Prototipo local · Ejemplo estático</p>
-    <h1>Del vídeo original al análisis.</h1>
+    <p class="eyebrow">Prototipo local · Demostración técnica no comercial</p>
+    <h1>20 segundos de tenis real: original y análisis.</h1>
     <p class="lead">Esta página no ejecuta Tennis Lab. Muestra un ejemplo ya generado en un ordenador local, para que puedas ver la salida. Para analizar tus propios vídeos hay que ejecutar la aplicación en tu equipo; ver el <a href="https://github.com/gabricross/tennis_app#readme">README</a>.</p>
 
     <div class="grid">
       <figure>
-        <figcaption>Original</figcaption>
-        <video controls playsinline preload="metadata" src="https://github.com/gabricross/tennis_app/releases/download/ejemplo-v1/ejemplo_original.mp4"></video>
+        <figcaption>Original · 20 segundos</figcaption>
+        <video controls playsinline preload="metadata" aria-label="Fragmento original de CalTennis de 20 segundos" src="https://github.com/gabricross/tennis_app/releases/download/ejemplo-v1/caltennis_original_20s.mp4"></video>
       </figure>
       <figure>
-        <figcaption>Análisis</figcaption>
-        <video controls playsinline preload="metadata" src="https://github.com/gabricross/tennis_app/releases/download/ejemplo-v1/ejemplo_analisis.mp4"></video>
+        <figcaption>Análisis de Tennis Lab · 20 segundos</figcaption>
+        <video controls playsinline preload="metadata" aria-label="Análisis experimental del mismo fragmento de 20 segundos" src="https://github.com/gabricross/tennis_app/releases/download/ejemplo-v1/caltennis_analisis_20s.mp4"></video>
       </figure>
     </div>
 
     <div class="box">
-      <p>Vídeo: Gelato Prod (Pexels). Licencia Pexels. Modificaciones: recorte, normalización, audio eliminado y overlays.</p>
+      <p>Grabación: <a href="https://huggingface.co/datasets/demalenk/caltennis">CalTennis (2026)</a>, de Ilona Demler, Xinran Xie, Blake Werner, Anna Szczuka y Pietro Perona. Licencia del material: <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>. Análisis generado con Tennis Lab; no es una grabación propia ni implica el respaldo de los autores.</p>
+      <p>Modificaciones: fragmento de 20 segundos, normalización a 30 fps, audio eliminado y overlays en el resultado. <a href="https://huggingface.co/datasets/demalenk/caltennis/blob/4af17dd4d398aad4116a35b5a74de4388658d356/10_02_2025_08_00_court5/10_02_2025_08_14_59_000_court5_N_2_08_30_22_535.mp4">Fuente de la grabación</a> (intervalo aproximado 60–80 s).</p>
       <ul>
-        <li>Ejemplo de 4 segundos con el motor local actual.</li>
-        <li>Pelota experimental: detecciones parciales, no una trayectoria completa.</li>
-        <li>Sin métricas de movimiento en este fragmento: no hubo observaciones válidas suficientes.</li>
+        <li>Vídeo real de iPhone desde el fondo con cámara estable; no es una toma desde una grada elevada.</li>
+        <li>Resultado generado el 29 de octubre de 2026 con YOLO multiescala, anterior a las últimas mejoras. Aproximadamente 10 min 51 s de procesamiento en CPU; no es tiempo real.</li>
+        <li>Pelota experimental: 287 de 600 fotogramas con candidato (47,8 % de cobertura, no precisión). Hay pérdidas y posibles confusiones; la estela no es una trayectoria completa.</li>
+        <li>Calibración parcial: fuera de las referencias visibles hay extrapolación. Las distancias y velocidades de jugadores son estimaciones, no medidas certificadas.</li>
+        <li>Movimiento evaluable: 19,8 s para el jugador cercano y solo 4,1 s para el lejano. No equivale al recorrido completo de ambos.</li>
+        <li>Sin velocidad de pelota, reconstrucción 3D ni decisiones de dentro/fuera. El material conserva sus condiciones de uso no comercial.</li>
       </ul>
     </div>
   </main>

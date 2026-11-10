@@ -88,11 +88,18 @@ Las grabaciones de iPhone usadas para evaluacion local proceden de
 Autores: Ilona Demler, Xinran Xie, Blake Werner, Anna Szczuka y Pietro
 Perona; CalTennis (2026). Los videos tienen licencia
 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/):
-se conservan fuera de Git y se utilizan solo en pruebas locales no
-comerciales, con atribucion en los resultados. No se usan para entrenar
+se conservan fuera de Git y se utilizan para evaluacion no comercial,
+con atribucion en los resultados. No se usan para entrenar
 pesos distribuibles ni se incluyen videos, fotogramas o etiquetas
-derivadas del dataset en este repositorio. La licencia del articulo no
+derivadas del dataset en el arbol de codigo. La licencia del articulo no
 sustituye la del material audiovisual.
+
+La pagina estatica de GitHub Pages muestra un fragmento de 20 segundos
+y su analisis experimental como demostracion tecnica no comercial.
+Ambos MP4 se adjuntan a una release, fuera del historial de codigo,
+con atribucion, enlace a la fuente, licencia y modificaciones indicadas.
+Esto no concede permiso para usos comerciales ni atribuye la grabacion
+a Tennis Lab.
 
 ## Referencia fisica externa: CMU Panoptic Studio
 

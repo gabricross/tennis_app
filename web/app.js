@@ -791,7 +791,6 @@
       const example = state.config.showcase;
       $("#showcase-original").src = `/api/jobs/${example.job_id}/files/original.mp4`;
       $("#showcase-analysis").src = `/api/jobs/${example.job_id}/files/analysis.mp4`;
-      $("#showcase-original").poster = `/api/jobs/${example.job_id}/files/poster.jpg`;
       $("#showcase-analysis").poster = `/api/jobs/${example.job_id}/files/poster.jpg`;
       if (example.title) $("#showcase-title").textContent = example.title;
       $("#showcase-credit").textContent = example.credit;
