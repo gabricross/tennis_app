@@ -787,6 +787,17 @@
 
   run(async () => {
     state.config = await api("/api/config");
+    if (state.config.showcase) {
+      const example = state.config.showcase;
+      $("#showcase-original").src = `/api/jobs/${example.job_id}/files/original.mp4`;
+      $("#showcase-analysis").src = `/api/jobs/${example.job_id}/files/analysis.mp4`;
+      $("#showcase-original").poster = `/api/jobs/${example.job_id}/files/poster.jpg`;
+      $("#showcase-analysis").poster = `/api/jobs/${example.job_id}/files/poster.jpg`;
+      if (example.title) $("#showcase-title").textContent = example.title;
+      $("#showcase-credit").textContent = example.credit;
+      $("#showcase-notes").replaceChildren(...example.notes.map((note) => element("li", note)));
+      $("#showcase").hidden = false;
+    }
     $("#engine-status").textContent = state.config.models.people ? "Motor de jugadores preparado" : "Faltan modelos: ejecuta la preparación";
     $("#storage-path").textContent = state.config.storage;
     $("#use-previous").hidden = !state.config.previous_demo_available;

@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, model_validator
 from starlette.requests import ClientDisconnect
 
 import storage
-from config import DATA, EXAMPLE_VIDEO, MAX_ANALYSIS_SECONDS, MAX_PENDING_JOBS, MAX_UPLOAD_BYTES, MODELS, ROOT
+from config import DATA, EXAMPLE_VIDEO, MAX_ANALYSIS_SECONDS, MAX_PENDING_JOBS, MAX_UPLOAD_BYTES, MODELS, ROOT, SHOWCASE_FILE
 from court import (
     CALIBRATION_REFERENCES, COURT_LINES, LENGTH, WIDTH, CourtModel,
     calibration_preview, validate_corners,
@@ -229,6 +229,22 @@ def require_job(identity: str) -> dict:
     return job
 
 
+def showcase_example() -> dict | None:
+    try:
+        configuration = json.loads(SHOWCASE_FILE.read_text(encoding="utf-8"))
+        job = storage.get_job(str(configuration["job_id"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if job is None or job["status"] not in FINISHED:
+        return None
+    return {
+        "job_id": job["id"],
+        "title": str(configuration.get("title", "")),
+        "credit": str(configuration.get("credit", "")),
+        "notes": [str(note) for note in configuration.get("notes", [])],
+    }
+
+
 @app.get("/")
 def index():
     return FileResponse(ROOT / "web" / "index.html")
@@ -243,6 +259,7 @@ def configuration():
         "models": {name: (MODELS / f"{name}.onnx").exists() for name in ("people", "court", "ball", "ball_yolo", "ball_wasb")},
         "storage": str(DATA), "private_local_storage": True,
         "previous_demo_available": EXAMPLE_VIDEO.is_file(),
+        "showcase": showcase_example(),
         "court": {
             "width_m": WIDTH, "length_m": LENGTH, "lines": COURT_LINES,
             "references": {name: points.tolist() for name, points in CALIBRATION_REFERENCES.items()},

@@ -30,6 +30,15 @@
         <ol class="workflow" aria-label="Etapas del análisis"><li data-step="1" class="active"><span>01</span> Tu vídeo</li><li data-step="2"><span>02</span> La pista</li><li data-step="3"><span>03</span> El análisis</li><li data-step="4"><span>04</span> Tus resultados</li></ol>
 
         <section id="upload-stage" class="stage" aria-labelledby="upload-title">
+          <section class="showcase panel" id="showcase" aria-labelledby="showcase-title" hidden>
+            <div class="panel-top"><div><p class="eyebrow">ASÍ FUNCIONA · EJEMPLO REAL</p><h2 id="showcase-title">Del vídeo original al análisis.</h2></div></div>
+            <div class="showcase-grid">
+              <figure><figcaption>Original</figcaption><video id="showcase-original" controls playsinline preload="metadata" aria-label="Vídeo original del ejemplo"></video></figure>
+              <figure><figcaption>Análisis</figcaption><video id="showcase-analysis" controls playsinline preload="metadata" aria-label="Análisis del ejemplo"></video></figure>
+            </div>
+            <p class="small-note" id="showcase-credit"></p>
+            <ul class="small-note" id="showcase-notes"></ul>
+          </section>
           <div class="upload-grid"><div class="panel dropzone" id="dropzone">
             <span class="upload-icon" aria-hidden="true">↥</span><h2 id="upload-title">El siguiente clip es el tuyo.</h2><p>Arrastra un vídeo aquí o elígelo desde tu ordenador.</p>
             <input id="file-input" type="file" accept=".mp4,.mov,.webm,.mkv,.avi" class="sr-only" aria-label="Seleccionar vídeo de tenis">

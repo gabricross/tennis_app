@@ -689,6 +689,21 @@ archivo en GitHub. Si el ejemplo ya tiene overlays, sirve para comprobar
 el flujo, no para medir precision; los contadores originales no los calcula
 esta aplicacion.
 
+Para mostrar un ejemplo ya analizado al principio de la pantalla de inicio,
+crea `showcase.json` en la carpeta de datos privados (`data`, dentro de
+`TENNISLAB_HOME`) con el identificador del análisis terminado y su atribución:
+
+```json
+{
+  "job_id": "<id del análisis>",
+  "title": "Del vídeo original al análisis.",
+  "credit": "Vídeo: autor (plataforma). Licencia. Modificaciones: recorte, normalización y overlays.",
+  "notes": ["Pelota experimental: detecciones parciales."]
+}
+```
+
+Si el archivo falta o el análisis no está terminado, la sección no aparece.
+
 ## Resultados disponibles
 
 - MP4 anotado, sin audio.

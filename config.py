@@ -12,6 +12,7 @@ EXAMPLE_VIDEO = Path(os.environ.get(
 MODELS = HOME / "models"
 DATA = HOME / "data"
 DATABASE = DATA / "library.sqlite3"
+SHOWCASE_FILE = DATA / "showcase.json"
 MAX_UPLOAD_BYTES = 300 * 1024 * 1024
 MAX_ANALYSIS_SECONDS = 120
 MAX_SOURCE_SECONDS = 1800
