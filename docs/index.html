@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tennis Lab · Ejemplo de análisis</title>
+  <style>
+    :root{color-scheme:dark}
+    body{margin:0;background:#0c171b;color:#ecf3ec;font-family:"Segoe UI",Arial,sans-serif;line-height:1.6}
+    main{max-width:960px;margin:0 auto;padding:40px 20px}
+    .eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a2b7ba;margin:0 0 8px}
+    h1{font-size:32px;margin:0 0 12px}
+    .lead{color:#a2b7ba;max-width:70ch}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0}
+    figure{margin:0}
+    figcaption{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#a2b7ba;margin-bottom:6px}
+    video{width:100%;border-radius:10px;background:#000}
+    .box{background:#14252b;border:1px solid #2a4147;border-radius:12px;padding:18px 20px;margin-top:16px}
+    ul{margin:8px 0 0;padding-left:20px;color:#a2b7ba}
+    a{color:#d9fa73}
+    @media (max-width:720px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Prototipo local · Ejemplo estático</p>
+    <h1>Del vídeo original al análisis.</h1>
+    <p class="lead">Esta página no ejecuta Tennis Lab. Muestra un ejemplo ya generado en un ordenador local, para que puedas ver la salida. Para analizar tus propios vídeos hay que ejecutar la aplicación en tu equipo; ver el <a href="https://github.com/gabricross/tennis_app#readme">README</a>.</p>
+
+    <div class="grid">
+      <figure>
+        <figcaption>Original</figcaption>
+        <video controls playsinline preload="metadata" src="https://github.com/gabricross/tennis_app/releases/download/ejemplo-v1/ejemplo_original.mp4"></video>
+      </figure>
+      <figure>
+        <figcaption>Análisis</figcaption>
+        <video controls playsinline preload="metadata" src="https://github.com/gabricross/tennis_app/releases/download/ejemplo-v1/ejemplo_analisis.mp4"></video>
+      </figure>
+    </div>
+
+    <div class="box">
+      <p>Vídeo: Gelato Prod (Pexels). Licencia Pexels. Modificaciones: recorte, normalización, audio eliminado y overlays.</p>
+      <ul>
+        <li>Ejemplo de 4 segundos con el motor local actual.</li>
+        <li>Pelota experimental: detecciones parciales, no una trayectoria completa.</li>
+        <li>Sin métricas de movimiento en este fragmento: no hubo observaciones válidas suficientes.</li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>
