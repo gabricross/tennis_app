@@ -813,7 +813,7 @@
     $$("input[name=analysis-mode]").forEach((input) => input.addEventListener("change", updateReadiness));
     $("#auto-court").disabled = !state.config.models.court;
     $("#model-list").replaceChildren();
-    for (const [key, label] of [["people", "YOLOX-S · Personas"], ["court", "ResNet50 · Propuesta de pista"], ["ball", "TrackNet · Pelota experimental"], ["ball_yolo", "YOLOv8n tenis · Pelota ligera experimental"], ["ball_wasb", "WASB HRNet · Pelota multifotograma (pesos locales, licencia no aclarada)"]]) {
+    for (const [key, label] of [["people", "YOLOX-S · Personas"], ["court", "ResNet50 · Propuesta de pista"], ["ball", "TrackNet · Pelota experimental"], ["ball_yolo", "YOLOv8n tenis · Pelota ligera experimental"], ["ball_wasb", "WASB HRNet · Pelota multifotograma (pesos locales)"]]) {
       $("#model-list").append(element("li", `${label}: ${state.config.models[key] ? "instalado" : "no disponible"}`));
     }
     await refreshLibrary();

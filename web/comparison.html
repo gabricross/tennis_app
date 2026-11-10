@@ -31,11 +31,12 @@
   <h1>Lo que se grabó.<br><span>Lo que observó el sistema.</span></h1>
   <p id="description">Cargando los datos del análisis…</p>
   <p id="error" role="alert" hidden></p>
-  <div class="controls">
-    <button id="play" type="button" disabled>Reproducir ambos</button>
-    <button id="pause" class="secondary" type="button" disabled>Pausar</button>
-    <button id="restart" class="secondary" type="button" disabled>Volver al inicio</button>
+  <div class="controls video-pair-controls" data-video-pair="original analysis" role="group" aria-label="Reproducción de original y análisis">
+    <button id="play" type="button" data-video-action="play" disabled><span aria-hidden="true">▶</span> Reproducir ambos</button>
+    <button id="pause" class="secondary" type="button" data-video-action="pause" disabled>Pausar</button>
+    <button id="restart" class="secondary" type="button" data-video-action="restart" disabled>Volver al inicio</button>
     <span id="time">—</span>
+    <p data-pair-error role="alert" hidden></p>
   </div>
   <div class="videos">
     <article><h2>01 · Original normalizado, sin los nuevos overlays</h2><video id="original" hidden playsinline muted preload="none" aria-label="Fragmento original"></video></article>
@@ -62,26 +63,13 @@
     const original=document.querySelector("#original"), analysis=document.querySelector("#analysis");
     const error=document.querySelector("#error"), time=document.querySelector("#time");
     const originalLoader=new window.TennisVideoLoader(original), analysisLoader=new window.TennisVideoLoader(analysis);
-    for(const video of [original,analysis])video.addEventListener("videoloadstate",()=>{
-      const ready=originalLoader.ready&&analysisLoader.ready;
-      for(const id of ["play","pause","restart"])document.querySelector("#"+id).disabled=!ready;
-    });
     let duration=0;
     function report(message){error.textContent=message;error.hidden=false;}
     function align(){
-      if(analysis.readyState>=1&&Math.abs(analysis.currentTime-original.currentTime)>0.18)analysis.currentTime=original.currentTime;
       time.textContent=`${original.currentTime.toFixed(1).padStart(4,"0")} / ${duration.toFixed(1)} s`;
     }
-    document.querySelector("#play").addEventListener("click",async()=>{
-      align();
-      try{await Promise.all([original.play(),analysis.play()]);}
-      catch(failure){original.pause();analysis.pause();report(`Pulsa reproducir en los vídeos: ${failure.message}`);}
-    });
-    document.querySelector("#pause").addEventListener("click",()=>{original.pause();analysis.pause();});
-    document.querySelector("#restart").addEventListener("click",()=>{original.pause();analysis.pause();original.currentTime=0;analysis.currentTime=0;align();});
     original.addEventListener("timeupdate",align);
     original.addEventListener("seeked",align);
-    original.addEventListener("ended",()=>analysis.pause());
     for(const video of [original,analysis])video.addEventListener("error",()=>report("No se ha podido reproducir el vídeo. Puedes descargar el MP4 desde el análisis."));
     async function load(){
       const match=location.pathname.match(/^\/api\/jobs\/([a-f0-9-]+)\/comparison$/);

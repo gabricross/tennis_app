@@ -12,6 +12,68 @@ from playwright.sync_api import expect, sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def verify_pair(page) -> None:
+    controls = page.locator("[data-video-pair]").first
+    ids = controls.get_attribute("data-video-pair").split()
+    play = controls.locator("[data-video-action=play]")
+    pause = controls.locator("[data-video-action=pause]")
+    restart = controls.locator("[data-video-action=restart]")
+    state = """(ids) => {
+        const [a,b]=ids.map(id=>document.getElementById(id));
+        return {times:[a.currentTime,b.currentTime],paused:[a.paused,b.paused],delta:Math.abs(a.currentTime-b.currentTime)};
+    }"""
+    expect(play).to_be_enabled(timeout=30000)
+    page.locator("#" + ids[0]).evaluate("(v)=>{v.currentTime=2;}")
+    page.wait_for_function("(ids)=>ids.every(id=>Math.abs(document.getElementById(id).currentTime-2)<0.15)", arg=ids)
+    page.locator("#" + ids[1]).evaluate("(v)=>{v.currentTime=6;}")
+    play.click()
+    page.wait_for_function("(ids)=>ids.every(id=>document.getElementById(id).currentTime>2.3)", arg=ids)
+    result = page.evaluate(state, ids)
+    assert result["delta"] < 0.18 and not any(result["paused"]), result
+    pause.click()
+    assert all(page.evaluate(state, ids)["paused"])
+    restart.click()
+    page.wait_for_function("(ids)=>ids.every(id=>document.getElementById(id).currentTime===0)", arg=ids)
+    assert all(page.evaluate(state, ids)["paused"])
+
+    play.click()
+    page.wait_for_function("(ids)=>ids.every(id=>document.getElementById(id).currentTime>0.3)", arg=ids)
+    page.locator("#" + ids[1]).evaluate("(v)=>{v.currentTime=8;}")
+    page.wait_for_function("(ids)=>Math.abs(document.getElementById(ids[0]).currentTime-document.getElementById(ids[1]).currentTime)<0.18", arg=ids)
+    page.locator("#" + ids[0]).evaluate("(v)=>{v.playbackRate=1.5;}")
+    page.wait_for_function("(ids)=>ids.every(id=>document.getElementById(id).playbackRate===1.5)", arg=ids)
+    page.locator("#" + ids[1]).evaluate("(v)=>v.pause()")
+    page.wait_for_function("(ids)=>ids.every(id=>document.getElementById(id).paused)", arg=ids)
+    page.locator("#" + ids[0]).evaluate("(v)=>{v.playbackRate=1;}")
+    page.locator("#" + ids[0]).evaluate("(v)=>{v.currentTime=v.duration-0.2;}")
+    play.click()
+    page.wait_for_function("(ids)=>ids.every(id=>{const v=document.getElementById(id);return v.paused&&v.currentTime>19.5;})", arg=ids)
+    play.click()
+    page.wait_for_function("(ids)=>ids.every(id=>{const v=document.getElementById(id);return !v.paused&&v.currentTime>0.2&&v.currentTime<5;})", arg=ids)
+    pause.click()
+
+    page.locator("#" + ids[1]).evaluate("""(v)=>{
+        const play=v.play;
+        window.restorePairPlay=()=>{v.play=play;};
+        v.play=()=>Promise.reject(new Error("prueba de reproducción bloqueada"));
+    }""")
+    play.click()
+    expect(controls.locator("[data-pair-error]")).to_contain_text("prueba de reproducción bloqueada")
+    assert all(page.evaluate(state, ids)["paused"])
+    page.evaluate("() => window.restorePairPlay()")
+    play.click()
+    page.wait_for_function("(ids)=>ids.every(id=>!document.getElementById(id).paused)", arg=ids)
+    expect(controls.locator("[data-pair-error]")).to_be_hidden()
+    page.locator("#" + ids[0]).evaluate("(v)=>v.dispatchEvent(new Event('error'))")
+    expect(play).to_be_disabled()
+    assert all(page.evaluate(state, ids)["paused"])
+    page.locator("#" + ids[0]).locator("..").get_by_role("button", name="Reintentar").click()
+    expect(play).to_be_enabled(timeout=30000)
+    restart.click()
+    page.wait_for_function("(ids)=>ids.every(id=>document.getElementById(id).currentTime===0)", arg=ids)
+    print("PASS: paired play (<0.18 s drift), pause, seek, rate, restart, replay after end and failure recovery.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Verify full-download video loading with Edge.")
     parser.add_argument("--base-url", help="Also check a running local Tennis Lab instance.")
@@ -131,18 +193,30 @@ def main() -> None:
             assert page.evaluate("() => !loader.ready && !document.querySelector('video').hasAttribute('src')")
             print("PASS: rapid source replacement and clearing cannot reveal stale downloads.")
 
+            started.clear()
+            release.clear()
+            page.route("**/media/caltennis_original_20s.mp4", lambda route: route.continue_(url=base + "/slow.mp4"))
             page.goto(base + "/index.html")
+            assert started.wait(10)
+            page.wait_for_function("() => document.querySelectorAll('.video-loader[data-state=ready]').length===1")
+            expect(page.locator("[data-video-action=play]")).to_be_disabled()
+            expect(page.locator("[data-video-action=pause]")).to_be_disabled()
+            expect(page.locator("[data-video-action=restart]")).to_be_disabled()
+            release.set()
+            page.unroute("**/media/caltennis_original_20s.mp4")
             page.wait_for_function("() => document.querySelectorAll('.video-loader[data-state=ready]').length===2")
             for width in (1280, 390):
                 page.set_viewport_size({"width": width, "height": 900})
                 assert page.evaluate("() => document.documentElement.scrollWidth<=document.documentElement.clientWidth+1")
             assert page.evaluate("() => [...document.querySelectorAll('video')].every(v=>v.duration===20&&v.currentSrc.startsWith('blob:')&&!v.error)")
             print("PASS: public page has two fully loaded videos without desktop/mobile overflow.")
+            verify_pair(page)
 
             if arguments.base_url:
                 app_url = arguments.base_url.rstrip("/")
                 page.goto(app_url + "/")
                 page.wait_for_function("() => document.querySelectorAll('#showcase .video-loader[data-state=ready]').length===2")
+                verify_pair(page)
                 config = page.request.get(app_url + "/api/config").json()
                 library = page.request.get(app_url + "/api/library").json()
                 job_id = config["showcase"]["job_id"]
@@ -162,10 +236,7 @@ def main() -> None:
                 page.wait_for_function("() => document.querySelector('#result-video').parentElement.dataset.state==='ready'")
                 assert abs(page.locator("#result-video").evaluate("(v)=>v.currentTime") - 5) < 0.1
                 page.goto(app_url + f"/api/jobs/{job_id}/comparison")
-                expect(page.locator("#play")).to_be_enabled(timeout=30000)
-                page.locator("#play").click()
-                page.wait_for_function("() => [...document.querySelectorAll('video')].every(v=>v.currentTime>0.4)")
-                page.locator("#pause").click()
+                verify_pair(page)
                 print("PASS: local showcase, result switching/seek and dual comparison playback.")
             assert not errors, errors
             browser.close()

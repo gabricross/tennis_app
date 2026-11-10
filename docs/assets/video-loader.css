@@ -8,3 +8,10 @@
 .video-loading-panel a{color:#d9fa73}
 .video-loading-panel [role="alert"]{color:#ffb7a9}
 .video-loading-panel :focus-visible{outline:3px solid #72e1d1;outline-offset:4px}
+.video-pair-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:20px 0}
+.video-pair-controls button{border:0;border-radius:6px;padding:12px 18px;background:#30474d;color:#edf5ed;font:600 14px "Segoe UI",sans-serif;cursor:pointer}
+.video-pair-controls [data-video-action="play"]{background:#d9fa73;color:#17261b}
+.video-pair-controls button:disabled{opacity:.5;cursor:wait}
+.video-pair-controls button:focus-visible{outline:3px solid #72e1d1;outline-offset:4px}
+.video-pair-controls [data-pair-error]{flex-basis:100%;margin:0;color:#ffb7a9}
+.video-pair-controls [hidden]{display:none!important}

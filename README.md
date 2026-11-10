@@ -713,6 +713,12 @@ del tamano y de la conexion. Esto evita cortes por descarga incompleta,
 pero no garantiza fluidez si el equipo no puede decodificar el video.
 La subida local ya espera a recibir y verificar el archivo antes de
 abrir la preparacion de la pista; no inicia un analisis parcial.
+El ejemplo de inicio, la pagina publica y la comparacion tienen
+**Reproducir ambos**, **Pausar** y **Volver al inicio**. Se habilitan solo
+cuando ambos MP4 estan listos. La reproduccion conjunta toma el original
+como referencia y corrige desfases superiores a 0,15 s; los controles
+individuales siguen disponibles. No es una sincronizacion certificada
+fotograma a fotograma.
 La comprobacion de navegador `python tools/verify_video_loading.py`
 prueba descargas lentas, errores, reintentos y cambios de fuente con Edge
 headless (dependencias de desarrollo). Con `--base-url http://127.0.0.1:8768`

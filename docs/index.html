@@ -29,17 +29,23 @@
     <h1>20 segundos de tenis real: original y análisis.</h1>
     <p class="lead">Esta página no ejecuta Tennis Lab. Muestra un ejemplo ya generado en un ordenador local, para que puedas ver la salida. Para analizar tus propios vídeos hay que ejecutar la aplicación en tu equipo; ver el <a href="https://github.com/gabricross/tennis_app#readme">README</a>.</p>
 
+    <div class="video-pair-controls" data-video-pair="original analysis" role="group" aria-label="Reproducción de original y análisis">
+      <button type="button" data-video-action="play" disabled><span aria-hidden="true">▶</span> Reproducir ambos</button>
+      <button type="button" data-video-action="pause" disabled>Pausar</button>
+      <button type="button" data-video-action="restart" disabled>Volver al inicio</button>
+      <p data-pair-error role="alert" hidden></p>
+    </div>
     <div class="grid">
       <figure>
         <figcaption>Original · 20 segundos</figcaption>
-        <video hidden playsinline preload="none" aria-label="Fragmento original de CalTennis de 20 segundos" data-video-src="media/caltennis_original_20s.mp4"></video>
+        <video id="original" hidden playsinline preload="none" aria-label="Fragmento original de CalTennis de 20 segundos" data-video-src="media/caltennis_original_20s.mp4"></video>
       </figure>
       <figure>
         <figcaption>Análisis de Tennis Lab · 20 segundos</figcaption>
-        <video hidden playsinline preload="none" aria-label="Análisis experimental del mismo fragmento de 20 segundos" data-video-src="media/caltennis_analisis_20s.mp4"></video>
+        <video id="analysis" hidden playsinline preload="none" aria-label="Análisis experimental del mismo fragmento de 20 segundos" data-video-src="media/caltennis_analisis_20s.mp4"></video>
       </figure>
     </div>
-    <p class="lead">Cada vídeo se muestra al terminar la descarga completa. Pulsa reproducir cuando esté listo; la carga inicial puede tardar según tu conexión.</p>
+    <p class="lead">Cada vídeo se muestra al terminar la descarga completa. Pulsa «Reproducir ambos» para comparar el mismo instante; la carga inicial puede tardar según tu conexión.</p>
     <noscript><p>Activa JavaScript para preparar los reproductores, o abre el <a href="media/caltennis_original_20s.mp4">original</a> y el <a href="media/caltennis_analisis_20s.mp4">análisis</a> directamente.</p></noscript>
 
     <div class="box">

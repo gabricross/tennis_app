@@ -151,9 +151,84 @@ window.TennisVideoLoader = class {
   }
 };
 
+function setupVideoPair(controls) {
+  const [original, analysis] = controls.dataset.videoPair.split(" ").map((id) => document.getElementById(id));
+  const videos = [original, analysis];
+  const buttons = [...controls.querySelectorAll("[data-video-action]")];
+  const error = controls.querySelector("[data-pair-error]");
+  const ready = () => videos.every((video) => video.closest(".video-loader")?.dataset.state === "ready");
+  let linked = false, pending = false, attempt = 0;
+  const pause = () => {
+    attempt++;
+    linked = false;
+    pending = false;
+    videos.forEach((video) => video.pause());
+  };
+  const refresh = () => {
+    const available = ready();
+    if (!available) pause();
+    for (const button of buttons) {
+      button.disabled = !available || (pending && button.dataset.videoAction === "play");
+    }
+  };
+  const align = () => {
+    if (ready() && Math.abs(analysis.currentTime - original.currentTime) > 0.15) {
+      analysis.currentTime = original.currentTime;
+    }
+  };
+  for (const button of buttons) button.addEventListener("click", async () => {
+    if (button.dataset.videoAction !== "play") {
+      pause();
+      if (button.dataset.videoAction === "restart") {
+        videos.forEach((video) => { video.currentTime = 0; });
+        error.hidden = true;
+      }
+      refresh();
+      return;
+    }
+    error.hidden = true;
+    if (videos.some((video) => video.ended)) original.currentTime = 0;
+    analysis.currentTime = original.currentTime;
+    analysis.playbackRate = original.playbackRate;
+    const current = ++attempt;
+    linked = true;
+    pending = true;
+    refresh();
+    try {
+      await Promise.all(videos.map((video) => video.play()));
+    } catch (failure) {
+      if (current !== attempt) return;
+      pause();
+      console.error("Reproducción conjunta:", failure);
+      error.textContent = `No se han podido reproducir ambos vídeos. Pulsa reproducir de nuevo: ${failure.message}`;
+      error.hidden = false;
+      refresh();
+    } finally {
+      if (current === attempt) {
+        pending = false;
+        refresh();
+      }
+    }
+  });
+  original.addEventListener("timeupdate", () => { if (linked) align(); });
+  original.addEventListener("seeked", align);
+  original.addEventListener("ratechange", () => {
+    if (linked) analysis.playbackRate = original.playbackRate;
+  });
+  for (const video of videos) {
+    video.addEventListener("videoloadstate", refresh);
+    video.addEventListener("pause", () => {
+      if (linked && video.paused) { pause(); refresh(); }
+    });
+    video.addEventListener("ended", () => { pause(); refresh(); });
+  }
+  refresh();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   for (const video of document.querySelectorAll("video[data-video-src]")) {
     const loader = new window.TennisVideoLoader(video);
     void loader.load(video.dataset.videoSrc);
   }
+  for (const controls of document.querySelectorAll("[data-video-pair]")) setupVideoPair(controls);
 });
