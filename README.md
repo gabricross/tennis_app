@@ -704,6 +704,21 @@ crea `showcase.json` en la carpeta de datos privados (`data`, dentro de
 
 Si el archivo falta o el análisis no está terminado, la sección no aparece.
 
+Los reproductores del ejemplo, los resultados y la comparacion muestran
+**Cargando video...** hasta descargar el MP4 completo y preparar su
+reproduccion. No arrancan automaticamente. Si falla la descarga o el
+formato, se muestra un error con **Reintentar** y un enlace al archivo.
+Se necesita memoria para el video descargado y la espera inicial depende
+del tamano y de la conexion. Esto evita cortes por descarga incompleta,
+pero no garantiza fluidez si el equipo no puede decodificar el video.
+La subida local ya espera a recibir y verificar el archivo antes de
+abrir la preparacion de la pista; no inicia un analisis parcial.
+La comprobacion de navegador `python tools/verify_video_loading.py`
+prueba descargas lentas, errores, reintentos y cambios de fuente con Edge
+headless (dependencias de desarrollo). Con `--base-url http://127.0.0.1:8768`
+comprueba tambien el ejemplo local, el resultado y la comparacion; requiere
+un ejemplo configurado en `showcase.json`.
+
 ## Resultados disponibles
 
 - MP4 anotado, sin audio.
@@ -1021,16 +1036,19 @@ grabacion y conserva la atribucion que requiera su licencia.
 
 ## Que se publica en este repositorio
 
-Solo codigo, interfaz, manifiestos de dependencias, pruebas y documentacion.
-Se excluyen explicitamente grabaciones, resultados, bases de datos, pesos,
+Codigo, interfaz, manifiestos de dependencias, pruebas, documentacion y
+los dos MP4 de demostracion descritos abajo.
+Se excluyen las demas grabaciones, resultados, bases de datos, pesos,
 entornos virtuales, archivos `.env`, accesos directos con rutas personales e
 informes privados de verificacion. No se publica una instancia del servidor
 ni se configura ningun servicio de pago.
 
 La [pagina de ejemplo](https://gabricross.github.io/tennis_app/) es estatica:
 no permite subir videos ni ejecuta el motor Python. Muestra el original
-y el analisis de un fragmento CalTennis de 20 segundos, adjuntos a la
+y el analisis de un fragmento CalTennis de 20 segundos, disponibles en la
 [release de ejemplos](https://github.com/gabricross/tennis_app/releases/tag/ejemplo-v1),
-no al historial Git. Se conserva la atribucion y la licencia CC BY-NC 4.0
+con una copia de ambos MP4 en `docs/media` para descargarlos desde el
+mismo origen antes de mostrar los reproductores. Son las unicas
+excepciones de video a las exclusiones Git. Se conserva la atribucion y la licencia CC BY-NC 4.0
 del material; es una demostracion tecnica no comercial, no una
 certificacion de precision ni una grabacion propia de Tennis Lab.

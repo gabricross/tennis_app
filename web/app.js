@@ -3,6 +3,7 @@
 (() => {
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
+  const resultLoader = new window.TennisVideoLoader($("#result-video"));
   const state = {
     config: null, clips: [], jobs: [], clip: null, job: null, result: null,
     screen: "studio", stage: "upload", points: [], confirmedFrame: null,
@@ -79,7 +80,7 @@
   }
   function newAnalysis() {
     clearError();
-    $("#result-video").pause();
+    resultLoader.clear();
     state.clip = null;
     state.points = [];
     state.confirmedFrame = null;
@@ -143,7 +144,7 @@
         if (state.clip?.id === clip.id) {
           state.clip = null;
           state.result = null;
-          $("#result-video").pause();
+          resultLoader.clear();
           stage("upload");
         }
         await refreshLibrary();
@@ -539,8 +540,7 @@
     const video = $("#result-video");
     video.pause();
     video.poster = asset("poster.jpg");
-    video.src = asset("analysis.mp4");
-    video.load();
+    void resultLoader.load(asset("analysis.mp4"));
     $$("[data-result-view]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.resultView === "analysis")));
     $$("[data-map-mode]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.mapMode === "positions")));
     $("#result-view-label").textContent = "Vídeo analizado";
@@ -662,18 +662,14 @@
   }
   async function switchResultView(view) {
     if (!state.result || state.resultView === view) return;
-    const video = $("#result-video"), time = video.currentTime, playing = !video.paused;
+    const video = $("#result-video"), time = resultLoader.time, playing = !video.paused;
     video.pause();
     state.resultView = view;
     $$("[data-result-view]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.resultView === view)));
     $("#result-view-label").textContent = view === "analysis" ? "Vídeo analizado" : "Fragmento original normalizado";
     video.removeAttribute("poster");
-    video.src = asset(view === "analysis" ? "analysis.mp4" : "original.mp4");
-    video.addEventListener("loadedmetadata", () => {
-      video.currentTime = Math.min(time, video.duration);
-      if (playing) video.play().catch((failure) => error(`Pulsa reproducir para continuar: ${failure.message}`));
-    }, { once: true });
-    video.load();
+    const ready = await resultLoader.load(asset(view === "analysis" ? "analysis.mp4" : "original.mp4"), { time });
+    if (ready && playing) video.play().catch((failure) => error(`Pulsa reproducir para continuar: ${failure.message}`));
   }
 
   $$("[data-screen]").forEach((button) => button.addEventListener("click", () => {
@@ -765,10 +761,14 @@
   $("#result-video").addEventListener("timeupdate", updateResult);
   $("#result-video").addEventListener("seeked", updateResult);
   $("#result-video").addEventListener("loadedmetadata", updateResult);
+  $("#result-video").addEventListener("videoloadstate", () => {
+    $("#result-seek").disabled = !resultLoader.ready;
+    if (resultLoader.ready) updateResult();
+  });
   $("#result-video").addEventListener("error", () => { if (state.result) error("El vídeo no se ha podido reproducir. Prueba a descargar el MP4 y abrirlo con Edge o Chrome."); });
   $("#result-seek").addEventListener("input", () => { $("#result-video").currentTime = Number($("#result-seek").value); updateResult(); });
   $("#coverage-timeline").addEventListener("click", (event) => {
-    if (!state.result) return;
+    if (!state.result || !resultLoader.ready) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / bounds.width * 1200;
     $("#result-video").currentTime = Math.min(state.result.summary.duration, Math.max(0, (x - 80) / 1120 * state.result.summary.duration));
@@ -789,8 +789,10 @@
     state.config = await api("/api/config");
     if (state.config.showcase) {
       const example = state.config.showcase;
-      $("#showcase-original").src = `/api/jobs/${example.job_id}/files/original.mp4`;
-      $("#showcase-analysis").src = `/api/jobs/${example.job_id}/files/analysis.mp4`;
+      const originalLoader = new window.TennisVideoLoader($("#showcase-original"));
+      const analysisLoader = new window.TennisVideoLoader($("#showcase-analysis"));
+      void originalLoader.load(`/api/jobs/${example.job_id}/files/original.mp4`);
+      void analysisLoader.load(`/api/jobs/${example.job_id}/files/analysis.mp4`);
       $("#showcase-analysis").poster = `/api/jobs/${example.job_id}/files/poster.jpg`;
       if (example.title) $("#showcase-title").textContent = example.title;
       $("#showcase-credit").textContent = example.credit;

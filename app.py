@@ -466,4 +466,5 @@ def result_file(identity: str, filename: str):
     )
 
 
+app.mount("/media-assets", StaticFiles(directory=ROOT / "docs" / "assets"), name="media-assets")
 app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")

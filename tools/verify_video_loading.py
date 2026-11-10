@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import argparse
+import re
+import threading
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from playwright.sync_api import expect, sync_playwright
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Verify full-download video loading with Edge.")
+    parser.add_argument("--base-url", help="Also check a running local Tennis Lab instance.")
+    arguments = parser.parse_args()
+    media = (ROOT / "docs" / "media" / "caltennis_original_20s.mp4").read_bytes()
+    started, release = threading.Event(), threading.Event()
+    attempts = 0
+
+    class Handler(SimpleHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass
+
+        def do_GET(self):
+            nonlocal attempts
+            if self.path == "/fixture":
+                body = (
+                    '<meta charset="utf-8"><link rel="stylesheet" href="/assets/video-loader.css">'
+                    '<video hidden playsinline preload="none"></video>'
+                    '<script src="/assets/video-loader.js"></script>'
+                    '<script>window.loader=new TennisVideoLoader(document.querySelector("video"));</script>'
+                ).encode()
+            elif self.path in ("/slow.mp4", "/retry.mp4", "/broken.mp4", "/empty.mp4"):
+                if self.path == "/retry.mp4":
+                    attempts += 1
+                    if attempts == 1:
+                        self.send_error(503)
+                        return
+                body = b"invalid MP4" if self.path == "/broken.mp4" else b"" if self.path == "/empty.mp4" else media
+            else:
+                super().do_GET()
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Type", "text/html" if self.path == "/fixture" else "video/mp4")
+            self.end_headers()
+            if self.path == "/slow.mp4":
+                self.wfile.write(body[:len(body) // 2])
+                self.wfile.flush()
+                started.set()
+                if not release.wait(20):
+                    raise TimeoutError("The test did not release its slow video response.")
+                try:
+                    self.wfile.write(body[len(body) // 2:])
+                except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    # Source-switch tests intentionally cancel the old download.
+                    return
+            else:
+                self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(Handler, directory=ROOT / "docs"))
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(channel="msedge", headless=True)
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(base + "/fixture")
+            page.evaluate("""() => {
+                window.revoked=[];
+                const revoke=URL.revokeObjectURL.bind(URL);
+                URL.revokeObjectURL=url=>{revoked.push(url);revoke(url);};
+                window.done=null;
+                void loader.load("/slow.mp4").then(value=>{window.done=value;});
+            }""")
+            assert started.wait(10)
+            page.wait_for_function("() => document.querySelector('progress').value>0")
+            expect(page.locator("video")).to_be_hidden()
+            assert page.evaluate("() => !document.querySelector('video').controls && !document.querySelector('video').hasAttribute('src')")
+            assert page.evaluate("() => done===null && document.querySelector('progress').value<100")
+            expect(page.get_by_role("status")).to_have_text("Cargando vídeo…")
+            release.set()
+            page.wait_for_function("() => window.done===true")
+            expect(page.locator("video")).to_be_visible()
+            assert page.evaluate("() => loader.ready && document.querySelector('video').duration===20")
+            page.evaluate("() => document.querySelector('video').play()")
+            page.wait_for_function("() => document.querySelector('video').currentTime>0.4")
+            page.evaluate("() => document.querySelector('video').pause()")
+            page.evaluate("() => document.querySelector('video').dispatchEvent(new Event('error'))")
+            expect(page.get_by_role("alert")).to_contain_text("continuar la reproducción")
+            page.get_by_role("button", name="Reintentar").click()
+            page.wait_for_function("() => loader.ready")
+            print("PASS: hidden until every byte arrives; then visible and playing.")
+
+            old_url = page.locator("video").get_attribute("src")
+            assert page.evaluate("() => loader.load('/media/caltennis_original_20s.mp4',{time:5})")
+            assert page.evaluate("() => Math.abs(document.querySelector('video').currentTime-5)<0.1")
+            assert page.evaluate("(url) => revoked.includes(url)", old_url)
+            for path, message in [("/missing.mp4", "HTTP 404"), ("/broken.mp4", "no puede reproducir"), ("/empty.mp4", "vacío")]:
+                assert page.evaluate("(path) => loader.load(path)", path) is False
+                expect(page.locator("video")).to_be_hidden()
+                expect(page.get_by_role("alert")).to_contain_text(message)
+                expect(page.get_by_role("button", name="Reintentar")).to_be_visible()
+            page.route("**/offline.mp4", lambda route: route.abort())
+            assert page.evaluate("() => loader.load('/offline.mp4')") is False
+            expect(page.get_by_role("alert")).to_contain_text("No hay conexión")
+            assert page.evaluate("() => loader.load('/retry.mp4')") is False
+            page.get_by_role("button", name="Reintentar").click()
+            page.wait_for_function("() => loader.ready")
+            assert attempts == 2
+            print("PASS: source time restored, object URLs revoked, HTTP/network/empty/decode errors and retry.")
+
+            started.clear()
+            release.clear()
+            page.evaluate("""() => {
+                window.oldDone=null;
+                void loader.load('/slow.mp4').then(value=>{window.oldDone=value;});
+            }""")
+            assert started.wait(10)
+            assert page.evaluate("() => loader.load('/media/caltennis_original_20s.mp4',{time:7})")
+            release.set()
+            page.wait_for_function("() => oldDone===false")
+            assert page.evaluate("() => loader.ready && Math.abs(document.querySelector('video').currentTime-7)<0.1")
+            page.evaluate("() => loader.clear()")
+            assert page.evaluate("() => !loader.ready && !document.querySelector('video').hasAttribute('src')")
+            print("PASS: rapid source replacement and clearing cannot reveal stale downloads.")
+
+            page.goto(base + "/index.html")
+            page.wait_for_function("() => document.querySelectorAll('.video-loader[data-state=ready]').length===2")
+            for width in (1280, 390):
+                page.set_viewport_size({"width": width, "height": 900})
+                assert page.evaluate("() => document.documentElement.scrollWidth<=document.documentElement.clientWidth+1")
+            assert page.evaluate("() => [...document.querySelectorAll('video')].every(v=>v.duration===20&&v.currentSrc.startsWith('blob:')&&!v.error)")
+            print("PASS: public page has two fully loaded videos without desktop/mobile overflow.")
+
+            if arguments.base_url:
+                app_url = arguments.base_url.rstrip("/")
+                page.goto(app_url + "/")
+                page.wait_for_function("() => document.querySelectorAll('#showcase .video-loader[data-state=ready]').length===2")
+                config = page.request.get(app_url + "/api/config").json()
+                library = page.request.get(app_url + "/api/library").json()
+                job_id = config["showcase"]["job_id"]
+                job = next(item for item in library["jobs"] if item["id"] == job_id)
+                clip = next(item for item in library["clips"] if item["id"] == job["clip_id"])
+                jobs = [item for item in library["jobs"] if item["clip_id"] == clip["id"]]
+                index = next(i for i, item in enumerate(jobs) if item["id"] == job_id)
+                page.get_by_role("button", name=re.compile("^Biblioteca")).click()
+                card = page.locator(".library-card").filter(has=page.get_by_role("heading", name=clip["name"], exact=True))
+                if index >= 4:
+                    card.get_by_role("button", name=re.compile("^Ver los")).click()
+                card.locator(".library-actions button").nth(index + 1).click()
+                page.wait_for_function("() => document.querySelector('#result-video').parentElement.dataset.state==='ready'")
+                expect(page.locator("#result-seek")).to_be_enabled()
+                page.locator("#result-seek").evaluate("(e)=>{e.value=5;e.dispatchEvent(new Event('input',{bubbles:true}));}")
+                page.locator("[data-result-view=original]").click()
+                page.wait_for_function("() => document.querySelector('#result-video').parentElement.dataset.state==='ready'")
+                assert abs(page.locator("#result-video").evaluate("(v)=>v.currentTime") - 5) < 0.1
+                page.goto(app_url + f"/api/jobs/{job_id}/comparison")
+                expect(page.locator("#play")).to_be_enabled(timeout=30000)
+                page.locator("#play").click()
+                page.wait_for_function("() => [...document.querySelectorAll('video')].every(v=>v.currentTime>0.4)")
+                page.locator("#pause").click()
+                print("PASS: local showcase, result switching/seek and dual comparison playback.")
+            assert not errors, errors
+            browser.close()
+    finally:
+        release.set()
+        server.shutdown()
+        server.server_close()
+        worker.join()
+
+
+if __name__ == "__main__":
+    main()

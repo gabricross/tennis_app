@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Tennis Lab · Ejemplo de análisis</title>
+  <link rel="stylesheet" href="assets/video-loader.css">
+  <script src="assets/video-loader.js" defer></script>
   <style>
     :root{color-scheme:dark}
     body{margin:0;background:#0c171b;color:#ecf3ec;font-family:"Segoe UI",Arial,sans-serif;line-height:1.6}
@@ -30,13 +32,15 @@
     <div class="grid">
       <figure>
         <figcaption>Original · 20 segundos</figcaption>
-        <video controls playsinline preload="metadata" aria-label="Fragmento original de CalTennis de 20 segundos" src="https://github.com/gabricross/tennis_app/releases/download/ejemplo-v1/caltennis_original_20s.mp4"></video>
+        <video hidden playsinline preload="none" aria-label="Fragmento original de CalTennis de 20 segundos" data-video-src="media/caltennis_original_20s.mp4"></video>
       </figure>
       <figure>
         <figcaption>Análisis de Tennis Lab · 20 segundos</figcaption>
-        <video controls playsinline preload="metadata" aria-label="Análisis experimental del mismo fragmento de 20 segundos" src="https://github.com/gabricross/tennis_app/releases/download/ejemplo-v1/caltennis_analisis_20s.mp4"></video>
+        <video hidden playsinline preload="none" aria-label="Análisis experimental del mismo fragmento de 20 segundos" data-video-src="media/caltennis_analisis_20s.mp4"></video>
       </figure>
     </div>
+    <p class="lead">Cada vídeo se muestra al terminar la descarga completa. Pulsa reproducir cuando esté listo; la carga inicial puede tardar según tu conexión.</p>
+    <noscript><p>Activa JavaScript para preparar los reproductores, o abre el <a href="media/caltennis_original_20s.mp4">original</a> y el <a href="media/caltennis_analisis_20s.mp4">análisis</a> directamente.</p></noscript>
 
     <div class="box">
       <p>Grabación: <a href="https://huggingface.co/datasets/demalenk/caltennis">CalTennis (2026)</a>, de Ilona Demler, Xinran Xie, Blake Werner, Anna Szczuka y Pietro Perona. Licencia del material: <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a>. Análisis generado con Tennis Lab; no es una grabación propia ni implica el respaldo de los autores.</p>

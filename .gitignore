@@ -22,6 +22,8 @@ build/
 *.pth
 *.pt
 *.mp4
+!docs/media/caltennis_original_20s.mp4
+!docs/media/caltennis_analisis_20s.mp4
 *.mov
 *.webm
 *.mkv

@@ -79,8 +79,8 @@ adicionales de Pexels usan la [licencia Pexels](https://www.pexels.com/license/)
 los dos videos Davis Cup son de NaBUru38 (CC BY-SA 4.0) y el de
 Blaz Rola de ZooTennis.com (CC BY 3.0). Los derivados se identifican
 como recortados, normalizados, sin audio y con overlays anadidos.
-La galeria enlaza cada fuente y su licencia; no se publican videos
-ni fotogramas en Git.
+La galeria enlaza cada fuente y su licencia. Sus videos y fotogramas de
+prueba no se publican en Git, salvo el fragmento de demostracion descrito abajo.
 
 Las grabaciones de iPhone usadas para evaluacion local proceden de
 [CalTennis](https://huggingface.co/datasets/demalenk/caltennis), revision
@@ -88,15 +88,17 @@ Las grabaciones de iPhone usadas para evaluacion local proceden de
 Autores: Ilona Demler, Xinran Xie, Blake Werner, Anna Szczuka y Pietro
 Perona; CalTennis (2026). Los videos tienen licencia
 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/):
-se conservan fuera de Git y se utilizan para evaluacion no comercial,
+salvo el fragmento de demostracion descrito abajo, se conservan fuera de
+Git y se utilizan para evaluacion no comercial,
 con atribucion en los resultados. No se usan para entrenar
-pesos distribuibles ni se incluyen videos, fotogramas o etiquetas
+pesos distribuibles ni se incluyen otros videos, fotogramas o etiquetas
 derivadas del dataset en el arbol de codigo. La licencia del articulo no
 sustituye la del material audiovisual.
 
 La pagina estatica de GitHub Pages muestra un fragmento de 20 segundos
 y su analisis experimental como demostracion tecnica no comercial.
-Ambos MP4 se adjuntan a una release, fuera del historial de codigo,
+Ambos MP4 se adjuntan a una release y se incluyen tambien en `docs/media`
+para permitir su descarga completa desde el mismo origen de GitHub Pages,
 con atribucion, enlace a la fuente, licencia y modificaciones indicadas.
 Esto no concede permiso para usos comerciales ni atribuye la grabacion
 a Tennis Lab.
