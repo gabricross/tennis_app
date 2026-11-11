@@ -1,0 +1,12 @@
+.public-demo .sidebar nav a{display:flex;align-items:center;gap:12px;padding:13px 12px;border-radius:7px;color:var(--muted);font-size:12px}
+.public-demo .sidebar nav a>span:first-child{font-size:21px;line-height:1}
+.public-demo .sidebar nav a[aria-current=location]{background:#273c32;color:var(--lime)}
+.public-demo .sidebar nav a:hover{background:var(--panel2);color:var(--lime)}
+.public-demo .lead a,.public-demo noscript a{color:var(--lime);text-decoration:underline;text-underline-offset:4px}
+.public-demo .example-intro{margin-bottom:8px}
+.public-demo #examples,.public-demo #descargar-app,.public-demo #motor-y-privacidad{scroll-margin-top:24px}
+.public-demo #motor-y-privacidad{margin-top:40px}
+.public-demo #demo-upload-notice{margin:20px 0 0}
+.public-demo .about-grid .text-button{display:inline-block;margin-top:10px}
+@media(max-width:900px){.public-demo .sidebar nav a{font-size:11px;padding-inline:10px}}
+@media(max-width:650px){.public-demo .sidebar nav a{padding:8px;font-size:0;gap:0}.public-demo .sidebar nav a>span:first-child{font-size:22px}}

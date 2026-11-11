@@ -3,48 +3,64 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Tennis Lab · Dos ejemplos de análisis</title>
+  <meta name="theme-color" content="#101e21">
+  <title>Tennis Lab — Demo de tu estudio de análisis</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23101e21'/%3E%3Ccircle cx='16' cy='16' r='10' fill='%23d9fa73'/%3E%3Cpath d='M9 8q12 8 0 17M24 8q-12 8 0 17' stroke='%23101e21' fill='none'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/hero-court.css">
   <link rel="stylesheet" href="assets/video-loader.css">
+  <link rel="stylesheet" href="assets/demo.css">
   <script src="assets/video-loader.js" defer></script>
   <script src="assets/examples.js" defer></script>
-  <style>
-    :root{color-scheme:dark}
-    body{margin:0;background:#0c171b;color:#ecf3ec;font-family:"Segoe UI",Arial,sans-serif;line-height:1.6}
-    main{max-width:960px;margin:0 auto;padding:40px 20px}
-    .eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a2b7ba;margin:0 0 8px}
-    h1{font-size:32px;margin:0 0 12px}
-    .lead{color:#a2b7ba;max-width:70ch}
-    .showcase-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0}
-    figure{margin:0}
-    figcaption{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#a2b7ba;margin-bottom:6px}
-    video{width:100%;border-radius:10px;background:#000}
-    .media-example{background:#14252b;border:1px solid #2a4147;border-radius:12px;padding:18px 20px}
-    ul{margin:8px 0 0;padding-left:20px;color:#a2b7ba}
-    a{color:#d9fa73}
-    .download-app{background:#14252b;border:1px solid #2a4147;border-radius:12px;padding:24px;margin-top:32px}
-    .download-app h2{margin:0;font-size:24px}
-    .download-button{display:inline-block;background:#d9fa73;color:#0c171b;padding:12px 20px;border-radius:8px;font-weight:600;text-decoration:none}
-    .download-button:hover{background:#ecffa6}
-    a:focus-visible{outline:3px solid #72e1d1;outline-offset:4px}
-    .requirements{font-size:14px;color:#a2b7ba;margin-bottom:0}
-    @media (max-width:720px){.showcase-grid{grid-template-columns:1fr}}
-  </style>
+  <script src="assets/hero-court.js" defer></script>
+  <script src="assets/demo.js" defer></script>
 </head>
-<body>
-  <main>
-    <p class="eyebrow">Tennis Lab · Demo no comercial</p>
-    <h1>Tenis real, dos perspectivas.</h1>
-    <p class="lead">Aquí puedes ver los ejemplos y comparar el original con su análisis. Para subir tus propios vídeos, <a href="#descargar-app">descarga la app para tu ordenador</a>.</p>
+<body class="public-demo">
+  <a class="skip" href="#main">Saltar al contenido</a>
+  <aside class="sidebar">
+    <a class="brand" href="./" aria-label="Tennis Lab, inicio"><span class="brand-ball">◒</span><span>TENNIS<span class="brand-light"> / LAB</span></span></a>
+    <p class="sidebar-label">TU ESTUDIO · DEMO WEB</p>
+    <nav aria-label="Navegación principal">
+      <a href="https://github.com/gabricross/tennis_app#instalar-desde-github-en-windows" title="Instala la app para analizar un clip"><span aria-hidden="true">＋</span> Analizar un clip</a>
+      <a href="#examples" title="Biblioteca de ejemplos"><span aria-hidden="true">▤</span> Biblioteca <span class="count">2</span></a>
+      <a href="#motor-y-privacidad" title="Motor y privacidad"><span aria-hidden="true">◎</span> Motor y privacidad</a>
+    </nav>
+    <div class="sidebar-note"><span class="status-dot"></span><strong>APP EN TU ORDENADOR</strong><p>Sube y analiza tus vídeos en la app instalada.</p></div>
+    <div class="sidebar-footer">Demostración sin motor de análisis<small>Gabriele Ruggeri · Tennis Lab</small></div>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar"><div><span class="breadcrumb">TENNIS LAB</span><span class="slash">/</span><span>Estudio de análisis · Demo</span></div><span class="cpu-badge">DEMO WEB</span></header>
+    <main id="main">
+      <section id="screen-studio" class="screen">
+        <div class="studio-heading"><div><p class="eyebrow">VISIÓN POR COMPUTADOR, EN TU PISTA</p><h1>Tu tenis.<br><span>Con perspectiva.</span></h1><p class="lead">Explora dos resultados reales. Para analizar tus vídeos,<br> <a href="#descargar-app">descarga la app para tu ordenador</a>.</p></div>
+          <div class="hero-court" id="hero-court"><div class="court-illustration" id="court" role="application" aria-label="Campo de tenis interactivo: haz clic o usa las flechas y Enter para enviar la pelota" title="Haz clic en la pista para enviar la pelota"><span class="court-mid"></span><span class="court-service"></span><i class="court-dot north"></i><i class="court-dot south"></i><i class="court-shadow"></i><i class="court-ball"></i><b class="court-reticle"></b></div><span>DETECTAR · SEGUIR · EXPLORAR</span></div></div>
+        <ol class="workflow" aria-label="Etapas del análisis en la app instalada"><li class="active"><span>01</span> Tu vídeo</li><li><span>02</span> La pista</li><li><span>03</span> El análisis</li><li><span>04</span> Tus resultados</li></ol>
 
-    <p class="lead">Cada ejemplo tiene sus propios controles. Espera a la carga completa y pulsa «Reproducir ambos».</p>
-    <div id="examples" data-example-manifest="examples.json"></div>
-    <noscript><p>Activa JavaScript o abre los vídeos: CalTennis (<a href="media/caltennis_original_20s.mp4">original</a> / <a href="media/caltennis_analisis_20s.mp4">análisis</a>) y toma aérea (<a href="media/pexels_20219055_original.mp4">original</a> / <a href="media/pexels_20219055_analisis.mp4">análisis</a>). Créditos y condiciones en <a href="examples.json">el registro de ejemplos</a>.</p></noscript>
-    <section class="download-app" id="descargar-app" aria-labelledby="download-title">
-      <h2 id="download-title">Analiza tus propios vídeos.</h2>
-      <p class="lead">Descarga e instala Tennis Lab en tu ordenador para subir vídeos y generar tu propio análisis. Esta web solo muestra ejemplos; la app procesa los vídeos en tu equipo.</p>
-      <a class="download-button" href="https://github.com/gabricross/tennis_app#instalar-desde-github-en-windows">Descargar app en GitHub</a>
-      <p class="requirements">En GitHub: Code → Download ZIP. Extrae el ZIP y sigue la instalación. Requiere Windows 10/11 y Python 3.14 de 64 bits.</p>
-    </section>
-  </main>
+        <section id="upload-stage" class="stage" aria-labelledby="upload-title">
+          <p class="small-note example-intro">Ejemplos grabados · Espera a la carga completa y pulsa «Reproducir ambos».</p>
+          <div id="examples" data-example-manifest="examples.json"></div>
+          <noscript><p>Activa JavaScript o abre los vídeos: CalTennis (<a href="media/caltennis_original_20s.mp4">original</a> / <a href="media/caltennis_analisis_20s.mp4">análisis</a>) y toma aérea (<a href="media/pexels_20219055_original.mp4">original</a> / <a href="media/pexels_20219055_analisis.mp4">análisis</a>). Créditos y condiciones en <a href="examples.json">el registro de ejemplos</a>.</p></noscript>
+          <div class="upload-grid" id="descargar-app">
+            <div class="panel dropzone" id="dropzone">
+              <span class="upload-icon" aria-hidden="true">↥</span><h2 id="upload-title">El siguiente clip es el tuyo.</h2>
+              <p>Para cargar un vídeo, instala Tennis Lab en tu ordenador.<br>Esta demo web no admite subidas.</p>
+              <a class="button primary download-button" id="choose-file" href="https://github.com/gabricross/tennis_app#instalar-desde-github-en-windows">Cargar vídeo <span aria-hidden="true">↗</span></a>
+              <small>Te llevamos a GitHub para descargar e instalar la app.</small>
+              <p id="demo-upload-notice" class="notice warning" role="status" hidden>No se ha cargado ningún archivo. Instala la app desde GitHub para analizar tu vídeo.</p>
+            </div>
+            <aside class="panel good-clip"><p class="eyebrow">UN BUEN CLIP CAMBIA TODO</p><h3>La pista completa.<br> Dos jugadores.<br> Una cámara estable.</h3><ul><li>Individuales, preferiblemente desde el fondo.</li><li>Sin cortes, repeticiones ni primeros planos.</li><li>Revisa las esquinas antes de analizar.</li></ul><p class="small-note">No es tiempo real. En CPU, un clip corto puede requerir varios minutos.</p></aside>
+          </div>
+        </section>
+      </section>
+      <section id="motor-y-privacidad" aria-labelledby="privacy-title">
+        <div class="section-head"><div><p class="eyebrow">MOTOR Y PRIVACIDAD</p><h2 id="privacy-title">En tu ordenador. A tu ritmo.</h2></div></div>
+        <div class="about-grid">
+          <article class="panel"><h3>Procesamiento local</h3><p>Esta web reproduce ejemplos; no ejecuta IA. La app instalada procesa tus vídeos en tu equipo, sin enviarlos a una nube de análisis.</p><p class="small-note">Pelota experimental y movimiento estimado. Sin velocidad de pelota, 3D ni decisiones arbitrales.</p></article>
+          <article class="panel"><h3>Descarga e instalación</h3><p>En GitHub: Code → Download ZIP. Extrae el ZIP y sigue la instalación.</p><p class="small-note">Windows 10/11 · Python 3.14 de 64 bits · Internet para la preparación inicial.</p><a class="text-button" href="https://github.com/gabricross/tennis_app#instalar-desde-github-en-windows">Ver instrucciones en GitHub</a></article>
+        </div>
+      </section>
+    </main>
+    <footer class="main-footer"><span>Tennis Lab · Demostración no comercial</span><span>Ejemplos reales, no una certificación de precisión.</span></footer>
+  </div>
 </body>
 </html>

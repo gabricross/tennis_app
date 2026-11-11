@@ -1054,7 +1054,12 @@ informes privados de verificacion. No se publica una instancia del servidor
 ni se configura ningun servicio de pago.
 
 La [pagina de ejemplo](https://gabricross.github.io/tennis_app/) es estatica:
-no permite subir videos ni ejecuta el motor Python. Muestra el original
+comparte el aspecto de la app (barra lateral, pista interactiva y paneles),
+pero no permite subir videos ni ejecuta el motor Python. **Cargar video**
+y **Analizar un clip** llevan a GitHub para descargar e instalar la app;
+arrastrar un archivo muestra un aviso sin cargarlo.
+La biblioteca publica contiene solo los dos ejemplos, no una biblioteca
+personal ni un motor conectado. Muestra el original
 y el analisis de CalTennis (20 s) y de la toma aerea Pexels 20219055
 (22,8 s), en bloques independientes. Sus cuatro MP4 en `docs/media`
 son las unicas excepciones de video a las exclusiones Git y se muestran

@@ -99,6 +99,58 @@ def verify_examples(page) -> None:
     print("PASS: two vertically stacked examples, with independent loading and playback controls.")
 
 
+def app_appearance(page) -> dict:
+    return page.evaluate("""() => ({
+        background: getComputedStyle(document.body).backgroundColor,
+        sidebarWidth: getComputedStyle(document.querySelector('.sidebar')).width,
+        headingFont: getComputedStyle(document.querySelector('h1')).fontFamily,
+        headingSize: getComputedStyle(document.querySelector('h1')).fontSize,
+        topbarHeight: getComputedStyle(document.querySelector('.topbar')).height,
+    })""")
+
+
+def verify_static_demo(page) -> dict:
+    github = "https://github.com/gabricross/tennis_app#instalar-desde-github-en-windows"
+    expect(page.locator("body")).to_have_class("public-demo")
+    assert page.locator("input[type=file]").count() == 0
+    expect(page.locator("#choose-file")).to_have_attribute("href", github)
+    expect(page.get_by_role("link", name="Analizar un clip", exact=True)).to_have_attribute("href", github)
+    expect(page.locator("#dropzone")).to_contain_text("Esta demo web no admite subidas")
+    expect(page.locator(".good-clip h3")).to_have_text("La pista completa. Dos jugadores. Una cámara estable.")
+    for width in (1280, 900, 650, 390):
+        page.set_viewport_size({"width": width, "height": 900})
+        assert page.evaluate("() => document.documentElement.scrollWidth<=document.documentElement.clientWidth+1")
+        last_example = page.locator(".media-example").last.bounding_box()
+        upload = page.locator("#descargar-app").bounding_box()
+        assert upload["y"] >= last_example["y"] + last_example["height"]
+        expect(page.locator("#court")).to_have_attribute("tabindex", "0" if width > 650 else "-1")
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.get_by_role("link", name=re.compile("^Biblioteca")).click()
+    expect(page.get_by_role("link", name=re.compile("^Biblioteca"))).to_have_attribute("aria-current", "location")
+    page.get_by_role("link", name="Motor y privacidad", exact=True).click()
+    expect(page.get_by_role("link", name="Motor y privacidad", exact=True)).to_have_attribute("aria-current", "location")
+    expect(page.get_by_role("link", name=re.compile("^Biblioteca"))).not_to_have_attribute("aria-current", "location")
+    page.get_by_role("link", name="descarga la app para tu ordenador", exact=True).click()
+    expect(page.locator("#choose-file")).to_be_in_viewport()
+    before_drop = page.url
+    accepted = page.locator("body").evaluate("""body => {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(new File(['test'], 'test.mp4', {type:'video/mp4'}));
+        return ['dragover', 'drop'].map(type => body.dispatchEvent(
+            new DragEvent(type, {dataTransfer, bubbles:true, cancelable:true})
+        ));
+    }""")
+    assert accepted == [False, False], accepted
+    expect(page.locator("#demo-upload-notice")).to_be_visible()
+    assert page.url == before_drop
+    assert page.evaluate("""() => performance.getEntriesByType('resource')
+        .every(entry => !new URL(entry.name).pathname.startsWith('/api/'))""")
+    page.locator("#choose-file").focus()
+    expect(page.locator("#choose-file")).to_be_focused()
+    print("PASS: app-like static demo, GitHub upload links, file-drop rejection, navigation and responsive layout.")
+    return app_appearance(page)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Verify full-download video loading with Edge.")
     parser.add_argument("--base-url", help="Also check a running local Tennis Lab instance.")
@@ -237,11 +289,17 @@ def main() -> None:
             assert page.evaluate("() => [...document.querySelectorAll('video')].every(v=>v.duration>=20&&v.duration<23&&v.currentSrc.startsWith('blob:')&&!v.error)")
             print("PASS: public page has four fully loaded videos without desktop/mobile overflow.")
             verify_examples(page)
+            appearance = verify_static_demo(page)
 
             if arguments.base_url:
                 app_url = arguments.base_url.rstrip("/")
                 page.goto(app_url + "/")
                 page.wait_for_function("() => document.querySelectorAll('#showcase-examples .video-loader[data-state=ready]').length===4")
+                assert app_appearance(page) == appearance
+                expect(page.locator("#file-input")).to_have_attribute("type", "file")
+                expect(page.locator("#choose-file")).to_have_count(1)
+                assert page.locator("#choose-file").evaluate("(element) => element.tagName") == "BUTTON"
+                print("PASS: public and local appearance match; the real app keeps its file input and upload button.")
                 verify_examples(page)
                 assert page.locator("#use-previous").count() == 0
                 config = page.request.get(app_url + "/api/config").json()
