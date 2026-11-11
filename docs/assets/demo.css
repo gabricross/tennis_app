@@ -2,7 +2,7 @@
 .public-demo .sidebar nav a>span:first-child{font-size:21px;line-height:1}
 .public-demo .sidebar nav a[aria-current=location]{background:#273c32;color:var(--lime)}
 .public-demo .sidebar nav a:hover{background:var(--panel2);color:var(--lime)}
-.public-demo .lead a,.public-demo noscript a{color:var(--lime);text-decoration:underline;text-underline-offset:4px}
+.public-demo .lead a,.public-demo noscript a,.public-demo .sidebar-note a{color:var(--lime);text-decoration:underline;text-underline-offset:4px}
 .public-demo .example-intro{margin-bottom:8px}
 .public-demo #examples,.public-demo #descargar-app,.public-demo #motor-y-privacidad{scroll-margin-top:24px}
 .public-demo #motor-y-privacidad{margin-top:40px}
