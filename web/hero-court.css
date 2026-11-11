@@ -1,0 +1,20 @@
+.court-illustration{
+  transform:perspective(600px) rotateX(var(--rx,14deg)) rotateZ(var(--rz,18deg));
+  cursor:crosshair;
+  touch-action:manipulation;
+}
+.court-illustration:focus-visible{outline:1px solid var(--lime);outline-offset:6px}
+.court-illustration>*{pointer-events:none}
+.court-dot{width:9px;height:9px;transform:translate(-50%,-50%);z-index:2}
+.court-ball{position:absolute;width:6px;height:6px;border-radius:50%;background:var(--lime);box-shadow:0 0 10px var(--lime);z-index:4}
+.court-shadow{position:absolute;width:9px;height:5px;border-radius:50%;background:#000;z-index:1;transform:translate(-50%,-50%)}
+.court-reticle{position:absolute;width:20px;height:20px;border:1px solid var(--lime);border-radius:50%;transform:translate(-50%,-50%) scale(.6);opacity:0;transition:opacity .2s,transform .2s;z-index:5}
+.court-reticle::before,.court-reticle::after{content:"";position:absolute;background:var(--lime)}
+.court-reticle::before{left:50%;top:-5px;bottom:-5px;width:1px;transform:translateX(-50%)}
+.court-reticle::after{top:50%;left:-5px;right:-5px;height:1px;transform:translateY(-50%)}
+.court-reticle.on{opacity:.9;transform:translate(-50%,-50%) scale(1)}
+.court-ripple{position:absolute;width:10px;height:10px;border:1px solid var(--lime);border-radius:50%;transform:translate(-50%,-50%) scale(0);animation:court-ripple .9s ease-out forwards;z-index:2}
+@keyframes court-ripple{to{transform:translate(-50%,-50%) scale(3);opacity:0}}
+@media (prefers-reduced-motion:reduce){.court-ripple{display:none}.court-reticle{transition:none}}
+/* Eleva el campo para dejar libre la leyenda inferior del hero. */
+@media (min-width:651px){.hero-court .court-illustration{top:-12px}}
