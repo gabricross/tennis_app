@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, model_validator
 from starlette.requests import ClientDisconnect
 
 import storage
-from config import DATA, EXAMPLE_VIDEO, MAX_ANALYSIS_SECONDS, MAX_PENDING_JOBS, MAX_UPLOAD_BYTES, MODELS, ROOT, SHOWCASE_FILE
+from config import DATA, MAX_ANALYSIS_SECONDS, MAX_PENDING_JOBS, MAX_UPLOAD_BYTES, MODELS, ROOT, SHOWCASE_FILE
 from court import (
     CALIBRATION_REFERENCES, COURT_LINES, LENGTH, WIDTH, CourtModel,
     calibration_preview, validate_corners,
@@ -229,20 +229,46 @@ def require_job(identity: str) -> dict:
     return job
 
 
-def showcase_example() -> dict | None:
+def showcase_examples() -> list[dict]:
     try:
         configuration = json.loads(SHOWCASE_FILE.read_text(encoding="utf-8"))
-        job = storage.get_job(str(configuration["job_id"]))
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-    if job is None or job["status"] not in FINISHED:
-        return None
-    return {
-        "job_id": job["id"],
-        "title": str(configuration.get("title", "")),
-        "credit": str(configuration.get("credit", "")),
-        "notes": [str(note) for note in configuration.get("notes", [])],
-    }
+    except FileNotFoundError:
+        configuration = json.loads((ROOT / "docs" / "examples.json").read_text(encoding="utf-8"))
+    if isinstance(configuration, dict):
+        configuration = [configuration]
+    if not isinstance(configuration, list):
+        raise ValueError("showcase.json necesita un ejemplo o una lista de ejemplos.")
+    examples = []
+    for entry in configuration:
+        if not isinstance(entry, dict) or not isinstance(entry.get("notes", []), list):
+            raise ValueError("Configuración de ejemplo no válida.")
+        example = {
+            "title": str(entry.get("title", "")), "credit": str(entry.get("credit", "")),
+            "notes": [str(note) for note in entry.get("notes", [])],
+        }
+        for field in ("source_url", "license", "license_url", "modifications"):
+            if field in entry:
+                example[field] = str(entry[field])
+        if "job_id" in entry:
+            job = storage.get_job(str(entry["job_id"]))
+            if job is None or job["status"] not in FINISHED:
+                LOGGER.warning("Showcase job is missing or unfinished: %s", entry["job_id"])
+                continue
+            example.update(
+                job_id=job["id"], original=f"/api/jobs/{job['id']}/files/original.mp4",
+                analysis=f"/api/jobs/{job['id']}/files/analysis.mp4",
+            )
+        else:
+            for field in ("original", "analysis"):
+                source = entry.get(field)
+                if not isinstance(source, str) or not source.startswith("media/"):
+                    raise ValueError("El ejemplo necesita un MP4 incluido en docs/media.")
+                name = source.removeprefix("media/")
+                if Path(name).name != name or not name.endswith(".mp4") or not (ROOT / "docs" / "media" / name).is_file():
+                    raise ValueError("No se encuentra el MP4 incluido para el ejemplo.")
+                example[field] = f"/example-media/{name}"
+        examples.append(example)
+    return examples
 
 
 @app.get("/")
@@ -252,14 +278,15 @@ def index():
 
 @app.get("/api/config")
 def configuration():
+    examples = showcase_examples()
     return {
         "app": "TennisLab", "version": "1.0", "token": TOKEN,
         "max_upload_mb": MAX_UPLOAD_BYTES // 1024 // 1024,
         "max_analysis_seconds": MAX_ANALYSIS_SECONDS,
         "models": {name: (MODELS / f"{name}.onnx").exists() for name in ("people", "court", "ball", "ball_yolo", "ball_wasb")},
         "storage": str(DATA), "private_local_storage": True,
-        "previous_demo_available": EXAMPLE_VIDEO.is_file(),
-        "showcase": showcase_example(),
+        "showcases": examples,
+        "showcase": examples[0] if examples else None,
         "court": {
             "width_m": WIDTH, "length_m": LENGTH, "lines": COURT_LINES,
             "references": {name: points.tolist() for name, points in CALIBRATION_REFERENCES.items()},
@@ -318,27 +345,6 @@ async def upload(request: Request):
         raise HTTPException(499, "Carga cancelada por el cliente.") from error
     finally:
         if not committed and directory.exists():
-            shutil.rmtree(directory)
-
-
-@app.post("/api/examples/previous", status_code=201)
-async def previous_example():
-    source = EXAMPLE_VIDEO
-    if not source.exists():
-        raise HTTPException(404, "No se encuentra tu demo de tenis anterior.")
-    identity = str(uuid.uuid4())
-    directory = storage.resource_dir(identity)
-    directory.mkdir(parents=True)
-    committed = False
-    try:
-        await asyncio.to_thread(shutil.copyfile, source, directory / "upload")
-        metadata = await asyncio.to_thread(probe, directory / "upload")
-        metadata["input_notice"] = "Demo anterior con overlays. Sirve para probar el flujo, no como benchmark de precisión."
-        clip = storage.create_clip(identity, "Mi demo de tenis anterior.mp4", metadata)
-        committed = True
-        return clip
-    finally:
-        if not committed:
             shutil.rmtree(directory)
 
 
@@ -467,4 +473,5 @@ def result_file(identity: str, filename: str):
 
 
 app.mount("/media-assets", StaticFiles(directory=ROOT / "docs" / "assets"), name="media-assets")
+app.mount("/example-media", StaticFiles(directory=ROOT / "docs" / "media"), name="example-media")
 app.mount("/static", StaticFiles(directory=ROOT / "web"), name="static")

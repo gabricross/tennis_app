@@ -686,11 +686,6 @@
     run(() => upload(event.dataTransfer.files[0]));
   });
   $("#cancel-upload").addEventListener("click", () => state.xhr?.abort());
-  $("#use-previous").addEventListener("click", () => run(async () => {
-    $("#use-previous").disabled = true;
-    try { const clip = await api("/api/examples/previous", { method: "POST" }); await refreshLibrary(); await loadClip(clip); }
-    finally { $("#use-previous").disabled = false; }
-  }));
   $("#change-clip").addEventListener("click", newAnalysis);
   $("#new-analysis").addEventListener("click", newAnalysis);
   $("#load-frame").addEventListener("click", () => run(loadPreview));
@@ -787,21 +782,9 @@
 
   run(async () => {
     state.config = await api("/api/config");
-    if (state.config.showcase) {
-      const example = state.config.showcase;
-      const originalLoader = new window.TennisVideoLoader($("#showcase-original"));
-      const analysisLoader = new window.TennisVideoLoader($("#showcase-analysis"));
-      void originalLoader.load(`/api/jobs/${example.job_id}/files/original.mp4`);
-      void analysisLoader.load(`/api/jobs/${example.job_id}/files/analysis.mp4`);
-      $("#showcase-analysis").poster = `/api/jobs/${example.job_id}/files/poster.jpg`;
-      if (example.title) $("#showcase-title").textContent = example.title;
-      $("#showcase-credit").textContent = example.credit;
-      $("#showcase-notes").replaceChildren(...example.notes.map((note) => element("li", note)));
-      $("#showcase").hidden = false;
-    }
+    window.TennisExamples.render($("#showcase-examples"), state.config.showcases);
     $("#engine-status").textContent = state.config.models.people ? "Motor de jugadores preparado" : "Faltan modelos: ejecuta la preparación";
     $("#storage-path").textContent = state.config.storage;
-    $("#use-previous").hidden = !state.config.previous_demo_available;
     $("#complete-mode").disabled = !state.config.models.ball && !state.config.models.ball_yolo;
     $("#ball-backend option[value=tracknet]").disabled = !state.config.models.ball;
     $("#ball-backend option[value=yolo]").disabled = !state.config.models.ball_yolo;

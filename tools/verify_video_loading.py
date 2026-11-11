@@ -12,8 +12,8 @@ from playwright.sync_api import expect, sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def verify_pair(page) -> None:
-    controls = page.locator("[data-video-pair]").first
+def verify_pair(page, pair_index: int = 0) -> None:
+    controls = page.locator("[data-video-pair]").nth(pair_index)
     ids = controls.get_attribute("data-video-pair").split()
     play = controls.locator("[data-video-action=play]")
     pause = controls.locator("[data-video-action=pause]")
@@ -47,7 +47,7 @@ def verify_pair(page) -> None:
     page.locator("#" + ids[0]).evaluate("(v)=>{v.playbackRate=1;}")
     page.locator("#" + ids[0]).evaluate("(v)=>{v.currentTime=v.duration-0.2;}")
     play.click()
-    page.wait_for_function("(ids)=>ids.every(id=>{const v=document.getElementById(id);return v.paused&&v.currentTime>19.5;})", arg=ids)
+    page.wait_for_function("(ids)=>ids.every(id=>{const v=document.getElementById(id);return v.paused&&v.currentTime>v.duration-0.3;})", arg=ids)
     play.click()
     page.wait_for_function("(ids)=>ids.every(id=>{const v=document.getElementById(id);return !v.paused&&v.currentTime>0.2&&v.currentTime<5;})", arg=ids)
     pause.click()
@@ -72,6 +72,31 @@ def verify_pair(page) -> None:
     restart.click()
     page.wait_for_function("(ids)=>ids.every(id=>document.getElementById(id).currentTime===0)", arg=ids)
     print("PASS: paired play (<0.18 s drift), pause, seek, rate, restart, replay after end and failure recovery.")
+
+
+def verify_examples(page) -> None:
+    examples = page.locator(".media-example")
+    expect(examples).to_have_count(2)
+    first, second = examples.nth(0).bounding_box(), examples.nth(1).bounding_box()
+    assert second["y"] >= first["y"] + first["height"], (first, second)
+    expect(examples.nth(0).locator("h2")).to_contain_text("iPhone")
+    expect(examples.nth(1).locator("h2")).to_contain_text("aérea")
+    expect(examples.nth(1)).to_contain_text("7,2 %")
+    for index in range(2):
+        verify_pair(page, index)
+    pairs = [example.locator("video") for example in (examples.nth(0), examples.nth(1))]
+    examples.nth(0).locator("[data-video-action=play]").click()
+    page.wait_for_function("() => [...document.querySelectorAll('.media-example:first-child video')].every(v=>!v.paused&&v.currentTime>0.2)")
+    assert pairs[1].evaluate_all("(vs)=>vs.every(v=>v.paused&&v.currentTime===0)")
+    examples.nth(1).locator("[data-video-action=play]").click()
+    page.wait_for_function("() => [...document.querySelectorAll('.media-example:last-child video')].every(v=>!v.paused&&v.currentTime>0.2)")
+    examples.nth(0).locator("[data-video-action=pause]").click()
+    assert pairs[0].evaluate_all("(vs)=>vs.every(v=>v.paused)")
+    assert pairs[1].evaluate_all("(vs)=>vs.every(v=>!v.paused)")
+    examples.nth(0).locator("[data-video-action=restart]").click()
+    assert pairs[1].evaluate_all("(vs)=>vs.every(v=>!v.paused)")
+    examples.nth(1).locator("[data-video-action=pause]").click()
+    print("PASS: two vertically stacked examples, with independent loading and playback controls.")
 
 
 def main() -> None:
@@ -197,26 +222,28 @@ def main() -> None:
             release.clear()
             page.route("**/media/caltennis_original_20s.mp4", lambda route: route.continue_(url=base + "/slow.mp4"))
             page.goto(base + "/index.html")
+            page.wait_for_function("() => document.querySelector('.media-example .video-loader[data-state=loading] progress')?.value>0")
             assert started.wait(10)
-            page.wait_for_function("() => document.querySelectorAll('.video-loader[data-state=ready]').length===1")
-            expect(page.locator("[data-video-action=play]")).to_be_disabled()
-            expect(page.locator("[data-video-action=pause]")).to_be_disabled()
-            expect(page.locator("[data-video-action=restart]")).to_be_disabled()
+            page.wait_for_function("() => document.querySelector('.media-example .video-loader[data-state=ready]')")
+            for action in ("play", "pause", "restart"):
+                expect(page.locator(".media-example").first.locator(f"[data-video-action={action}]")).to_be_disabled()
+            expect(page.locator(".media-example").nth(1).locator("[data-video-action=play]")).to_be_enabled(timeout=30000)
             release.set()
             page.unroute("**/media/caltennis_original_20s.mp4")
-            page.wait_for_function("() => document.querySelectorAll('.video-loader[data-state=ready]').length===2")
+            page.wait_for_function("() => document.querySelectorAll('.video-loader[data-state=ready]').length===4")
             for width in (1280, 390):
                 page.set_viewport_size({"width": width, "height": 900})
                 assert page.evaluate("() => document.documentElement.scrollWidth<=document.documentElement.clientWidth+1")
-            assert page.evaluate("() => [...document.querySelectorAll('video')].every(v=>v.duration===20&&v.currentSrc.startsWith('blob:')&&!v.error)")
-            print("PASS: public page has two fully loaded videos without desktop/mobile overflow.")
-            verify_pair(page)
+            assert page.evaluate("() => [...document.querySelectorAll('video')].every(v=>v.duration>=20&&v.duration<23&&v.currentSrc.startsWith('blob:')&&!v.error)")
+            print("PASS: public page has four fully loaded videos without desktop/mobile overflow.")
+            verify_examples(page)
 
             if arguments.base_url:
                 app_url = arguments.base_url.rstrip("/")
                 page.goto(app_url + "/")
-                page.wait_for_function("() => document.querySelectorAll('#showcase .video-loader[data-state=ready]').length===2")
-                verify_pair(page)
+                page.wait_for_function("() => document.querySelectorAll('#showcase-examples .video-loader[data-state=ready]').length===4")
+                verify_examples(page)
+                assert page.locator("#use-previous").count() == 0
                 config = page.request.get(app_url + "/api/config").json()
                 library = page.request.get(app_url + "/api/library").json()
                 job_id = config["showcase"]["job_id"]

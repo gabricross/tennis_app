@@ -6,9 +6,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 DEFAULT_HOME = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / ".local" / "share"))) / "TennisLab"
 HOME = Path(os.environ.get("TENNISLAB_HOME", str(DEFAULT_HOME))).expanduser().resolve()
-EXAMPLE_VIDEO = Path(os.environ.get(
-    "TENNISLAB_EXAMPLE_VIDEO", str(ROOT.parent / "Demo_Tennis_Tracker.mp4")
-)).expanduser().resolve()
 MODELS = HOME / "models"
 DATA = HOME / "data"
 DATABASE = DATA / "library.sqlite3"

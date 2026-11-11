@@ -34,6 +34,57 @@ class ConfigurationTests(unittest.TestCase):
             )
             self.assertEqual(result.stdout.strip(), "detection")
 
+    def test_showcases_support_bundled_defaults_and_legacy_local_configuration(self):
+        code = """
+import json
+from unittest.mock import patch
+import app
+from config import SHOWCASE_FILE
+
+examples = app.configuration()["showcases"]
+assert len(examples) == 2
+assert "caltennis" in examples[0]["original"]
+assert "pexels_20219055" in examples[1]["analysis"]
+assert all(example["original"].startswith("/example-media/") for example in examples)
+assert "previous_demo_available" not in app.configuration()
+assert not any(getattr(route, "path", "") == "/api/examples/previous" for route in app.app.routes)
+
+legacy = {"job_id":"existing", "title":"Legacy example", "notes":["Partial"]}
+SHOWCASE_FILE.write_text(json.dumps(legacy), encoding="utf-8")
+with patch.object(app.storage, "get_job", return_value={"id":"existing", "status":"completed"}):
+    configured = app.configuration()
+    assert len(configured["showcases"]) == 1
+    assert configured["showcase"]["job_id"] == "existing"
+    assert configured["showcase"]["original"] == "/api/jobs/existing/files/original.mp4"
+    SHOWCASE_FILE.write_text(json.dumps([legacy, legacy]), encoding="utf-8")
+    assert len(app.showcase_examples()) == 2
+with patch.object(app.storage, "get_job", return_value=None), patch.object(app.LOGGER, "warning") as warning:
+    assert app.showcase_examples() == []
+    assert warning.call_count == 2
+SHOWCASE_FILE.write_text("[]", encoding="utf-8")
+assert app.configuration()["showcases"] == []
+SHOWCASE_FILE.write_text("42", encoding="utf-8")
+try:
+    app.showcase_examples()
+except ValueError as error:
+    assert "lista" in str(error)
+else:
+    raise AssertionError("Invalid configuration must surface an error.")
+SHOWCASE_FILE.write_text(json.dumps([{"original":"media/../private.mp4", "analysis":"media/a.mp4"}]), encoding="utf-8")
+try:
+    app.showcase_examples()
+except ValueError:
+    pass
+else:
+    raise AssertionError("An example cannot expose an arbitrary local file.")
+"""
+        with tempfile.TemporaryDirectory() as temporary:
+            subprocess.run(
+                [sys.executable, "-c", code], cwd=ROOT,
+                env=dict(os.environ, TENNISLAB_HOME=temporary),
+                capture_output=True, text=True, check=True,
+            )
+
     def test_selected_missing_ball_model_never_falls_back_to_another_backend(self):
         code = """
 from unittest.mock import Mock, patch

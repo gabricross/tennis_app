@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from config import EXAMPLE_VIDEO, HOME, PORT
+from config import HOME, PORT
 from court import validate_corners
 
 DEMO_CORNERS = [
@@ -32,7 +32,7 @@ class VerificationConfig:
 
 def parse_arguments() -> VerificationConfig:
     parser = argparse.ArgumentParser(description="Verify Tennis Lab using your own local tennis clip.")
-    parser.add_argument("--video", type=Path, default=EXAMPLE_VIDEO)
+    parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--url", default=f"http://127.0.0.1:{PORT}")
     parser.add_argument("--start", type=float, default=0)
     parser.add_argument("--players-only", action="store_true", help="Validate a light installation without court or ball models.")
@@ -42,7 +42,7 @@ def parse_arguments() -> VerificationConfig:
                         help="Four normalized outer corners, clockwise from the far-left corner.")
     arguments = parser.parse_args()
     if not arguments.video.is_file():
-        parser.error("Provide an existing local clip with --video. No example video is shipped.")
+        parser.error("Provide an existing local clip with --video.")
     parsed = urlsplit(arguments.url)
     if parsed.scheme != "http" or parsed.hostname not in ("127.0.0.1", "localhost"):
         parser.error("Verification only supports an HTTP server on this computer.")

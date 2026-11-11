@@ -5,7 +5,7 @@
   <meta name="theme-color" content="#101e21">
   <title>Tennis Lab — Tu estudio de análisis</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23101e21'/%3E%3Ccircle cx='16' cy='16' r='10' fill='%23d9fa73'/%3E%3Cpath d='M9 8q12 8 0 17M24 8q-12 8 0 17' stroke='%23101e21' fill='none'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/hero-court.css"><link rel="stylesheet" href="/media-assets/video-loader.css"><script src="/media-assets/video-loader.js" defer></script><script src="/static/app.js" defer></script><script src="/static/hero-court.js" defer></script>
+  <link rel="stylesheet" href="/static/styles.css"><link rel="stylesheet" href="/static/hero-court.css"><link rel="stylesheet" href="/media-assets/video-loader.css"><script src="/media-assets/video-loader.js" defer></script><script src="/media-assets/examples.js" defer></script><script src="/static/app.js" defer></script><script src="/static/hero-court.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">Saltar al contenido</a>
@@ -30,28 +30,13 @@
         <ol class="workflow" aria-label="Etapas del análisis"><li data-step="1" class="active"><span>01</span> Tu vídeo</li><li data-step="2"><span>02</span> La pista</li><li data-step="3"><span>03</span> El análisis</li><li data-step="4"><span>04</span> Tus resultados</li></ol>
 
         <section id="upload-stage" class="stage" aria-labelledby="upload-title">
-          <section class="showcase panel" id="showcase" aria-labelledby="showcase-title" hidden>
-            <div class="panel-top"><div><p class="eyebrow">ASÍ FUNCIONA · EJEMPLO REAL</p><h2 id="showcase-title">Del vídeo original al análisis.</h2></div></div>
-            <div class="video-pair-controls" data-video-pair="showcase-original showcase-analysis" role="group" aria-label="Reproducción de original y análisis">
-              <button type="button" data-video-action="play" disabled><span aria-hidden="true">▶</span> Reproducir ambos</button>
-              <button type="button" data-video-action="pause" disabled>Pausar</button>
-              <button type="button" data-video-action="restart" disabled>Volver al inicio</button>
-              <p data-pair-error role="alert" hidden></p>
-            </div>
-            <div class="showcase-grid">
-              <figure><figcaption>Original</figcaption><video id="showcase-original" hidden playsinline preload="none" aria-label="Vídeo original del ejemplo"></video></figure>
-              <figure><figcaption>Análisis</figcaption><video id="showcase-analysis" hidden playsinline preload="none" aria-label="Análisis del ejemplo"></video></figure>
-            </div>
-            <p class="small-note" id="showcase-credit"></p>
-            <ul class="small-note" id="showcase-notes"></ul>
-          </section>
+          <div id="showcase-examples"></div>
           <div class="upload-grid"><div class="panel dropzone" id="dropzone">
             <span class="upload-icon" aria-hidden="true">↥</span><h2 id="upload-title">El siguiente clip es el tuyo.</h2><p>Arrastra un vídeo aquí o elígelo desde tu ordenador.</p>
             <input id="file-input" type="file" accept=".mp4,.mov,.webm,.mkv,.avi" class="sr-only" aria-label="Seleccionar vídeo de tenis">
             <button class="button primary" id="choose-file">Elegir vídeo <span aria-hidden="true">↗</span></button>
             <small>MP4, MOV, WebM, MKV o AVI · Hasta 300 MB</small>
             <div id="upload-progress" hidden><progress id="upload-bar" max="100" value="0"></progress><p id="upload-status" role="status">Preparando carga…</p><button id="cancel-upload" class="text-button">Cancelar carga</button></div>
-            <button id="use-previous" class="text-button previous-button" hidden>Probar con mi demo de tenis anterior</button>
           </div><aside class="panel good-clip"><p class="eyebrow">UN BUEN CLIP CAMBIA TODO</p><h3>La pista completa.<br>Dos jugadores.<br>Una cámara estable.</h3><ul><li>Individuales, preferiblemente desde el fondo.</li><li>Sin cortes, repeticiones ni primeros planos.</li><li>Seleccionarás entre 1 y 120 segundos.</li><li>Revisarás las esquinas antes de analizar.</li></ul><p class="small-note">No es tiempo real. En CPU, un clip corto puede requerir varios minutos, especialmente con pelota.</p></aside></div>
         </section>
 

@@ -69,7 +69,7 @@ High-speed and Tiny Objects in Sports Applications*, AVSS 2019,
 
 ## Multimedia y dependencias
 
-No se incluye video de un partido ni una base de datos personal. Cada persona
+Solo se incluyen los dos ejemplos de tenis descritos abajo, sin base de datos personal. Cada persona
 debe aportar grabaciones que tenga derecho a analizar o compartir. Los videos
 de Commons descargados opcionalmente conservan sus fuentes y licencias fuera
 del repositorio.
@@ -95,13 +95,24 @@ pesos distribuibles ni se incluyen otros videos, fotogramas o etiquetas
 derivadas del dataset en el arbol de codigo. La licencia del articulo no
 sustituye la del material audiovisual.
 
-La pagina estatica de GitHub Pages muestra un fragmento de 20 segundos
-y su analisis experimental como demostracion tecnica no comercial.
-Ambos MP4 se adjuntan a una release y se incluyen tambien en `docs/media`
+La pagina estatica y la instalacion local muestran dos ejemplos independientes:
+CalTennis (20 segundos) y la toma aerea Pexels 20219055 (22,8 segundos),
+cada uno con su original normalizado y su analisis experimental.
+CalTennis se presenta como demostracion tecnica no comercial.
+Los dos MP4 de CalTennis se adjuntan a una release y se incluyen tambien en `docs/media`
 para permitir su descarga completa desde el mismo origen de GitHub Pages,
 con atribucion, enlace a la fuente, licencia y modificaciones indicadas.
 Esto no concede permiso para usos comerciales ni atribuye la grabacion
 a Tennis Lab.
+
+El segundo ejemplo es de [Ahmet Kurt en Pexels](https://www.pexels.com/video/an-aerial-view-of-a-tennis-court-with-two-people-playing-20219055/),
+bajo la [licencia Pexels](https://www.pexels.com/license/). Se incluye
+en `docs/media`, normalizado a 720p y 30 fps, sin audio y con overlays
+en el analisis. No implica respaldo del autor ni ofrece seguimiento
+completo: solo hay candidatos de pelota en 49 de 685 fotogramas.
+Esta app no es una plataforma de stock ni vende el material original.
+No se incluyen otros videos ni la demo de futbol. Los assets del anterior
+ejemplo de tenis Gelato Prod se han retirado de la release.
 
 ## Referencia fisica externa: CMU Panoptic Studio
 

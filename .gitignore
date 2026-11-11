@@ -24,6 +24,8 @@ build/
 *.mp4
 !docs/media/caltennis_original_20s.mp4
 !docs/media/caltennis_analisis_20s.mp4
+!docs/media/pexels_20219055_original.mp4
+!docs/media/pexels_20219055_analisis.mp4
 *.mov
 *.webm
 *.mkv

@@ -17,8 +17,8 @@ Set-Location .\tennis_app
 ```
 
 Tambien puedes descargar el ZIP desde GitHub, extraerlo y ejecutar la
-preparacion desde esa carpeta. No necesita la demo de futbol ni un video
-incluido en el repositorio.
+preparacion desde esa carpeta. Incluye solo los dos ejemplos de tenis
+visibles en la aplicacion, cada uno con su original y analisis.
 
 Para una instalacion mas ligera, sin PyTorch ni los modelos de pista/pelota:
 
@@ -682,14 +682,13 @@ de Git y respetar las condiciones no comerciales del dataset.
 
 No se admite cualquier angulo como si fuese equivalente. Los primeros planos, dobles, tomas laterales recortadas o jugadores tapados pueden dar cobertura baja o impedir el analisis.
 
-El boton opcional **Probar con mi demo de tenis anterior** solo aparece si
-existe `Demo_Tennis_Tracker.mp4` en la carpeta superior o si configuras
-`TENNISLAB_EXAMPLE_VIDEO` con la ruta de un ejemplo propio. No se incluye ese
-archivo en GitHub. Si el ejemplo ya tiene overlays, sirve para comprobar
-el flujo, no para medir precision; los contadores originales no los calcula
-esta aplicacion.
+La pantalla de inicio muestra dos ejemplos independientes, uno debajo del
+otro: CalTennis desde el fondo (20 s) y Pexels 20219055 desde una toma aerea
+(22,8 s). Se incluyen con la instalacion; no requieren ejecutar un analisis
+ni descargar demos antiguas. La pelota del segundo tiene solo un 7,2 % de
+cobertura, no precision: se muestra como prueba de sus limitaciones.
 
-Para mostrar un ejemplo ya analizado al principio de la pantalla de inicio,
+Para sustituirlos por ejemplos propios ya analizados,
 crea `showcase.json` en la carpeta de datos privados (`data`, dentro de
 `TENNISLAB_HOME`) con el identificador del análisis terminado y su atribución:
 
@@ -702,7 +701,10 @@ crea `showcase.json` en la carpeta de datos privados (`data`, dentro de
 }
 ```
 
-Si el archivo falta o el análisis no está terminado, la sección no aparece.
+Tambien acepta una lista de estos objetos, en el orden en que apareceran.
+Si el archivo falta, se usan los ejemplos incluidos de `docs/examples.json`.
+Una lista vacia los oculta. Los trabajos inexistentes o sin terminar se
+omiten con un aviso en el registro; una configuracion invalida muestra un error.
 
 Los reproductores del ejemplo, los resultados y la comparacion muestran
 **Cargando video...** hasta descargar el MP4 completo y preparar su
@@ -713,12 +715,12 @@ del tamano y de la conexion. Esto evita cortes por descarga incompleta,
 pero no garantiza fluidez si el equipo no puede decodificar el video.
 La subida local ya espera a recibir y verificar el archivo antes de
 abrir la preparacion de la pista; no inicia un analisis parcial.
-El ejemplo de inicio, la pagina publica y la comparacion tienen
+Los ejemplos de inicio, la pagina publica y la comparacion tienen
 **Reproducir ambos**, **Pausar** y **Volver al inicio**. Se habilitan solo
 cuando ambos MP4 estan listos. La reproduccion conjunta toma el original
 como referencia y corrige desfases superiores a 0,15 s; los controles
 individuales siguen disponibles. No es una sincronizacion certificada
-fotograma a fotograma.
+fotograma a fotograma. Los controles de cada ejemplo son independientes.
 La comprobacion de navegador `python tools/verify_video_loading.py`
 prueba descargas lentas, errores, reintentos y cambios de fuente con Edge
 headless (dependencias de desarrollo). Con `--base-url http://127.0.0.1:8768`
@@ -853,7 +855,6 @@ Opciones de entorno:
 | --- | --- |
 | `TENNISLAB_HOME` | Directorio privado de modelos, entorno y datos. Por defecto, AppData local. |
 | `TENNISLAB_PORT` | Puerto del servidor local; por defecto, `8768`. |
-| `TENNISLAB_EXAMPLE_VIDEO` | Ruta a un ejemplo propio opcional; no se descarga ni publica. |
 
 Por ejemplo, para un entorno independiente:
 
@@ -1043,7 +1044,7 @@ grabacion y conserva la atribucion que requiera su licencia.
 ## Que se publica en este repositorio
 
 Codigo, interfaz, manifiestos de dependencias, pruebas, documentacion y
-los dos MP4 de demostracion descritos abajo.
+los cuatro MP4 de los dos ejemplos descritos abajo.
 Se excluyen las demas grabaciones, resultados, bases de datos, pesos,
 entornos virtuales, archivos `.env`, accesos directos con rutas personales e
 informes privados de verificacion. No se publica una instancia del servidor
@@ -1051,10 +1052,14 @@ ni se configura ningun servicio de pago.
 
 La [pagina de ejemplo](https://gabricross.github.io/tennis_app/) es estatica:
 no permite subir videos ni ejecuta el motor Python. Muestra el original
-y el analisis de un fragmento CalTennis de 20 segundos, disponibles en la
-[release de ejemplos](https://github.com/gabricross/tennis_app/releases/tag/ejemplo-v1),
-con una copia de ambos MP4 en `docs/media` para descargarlos desde el
-mismo origen antes de mostrar los reproductores. Son las unicas
-excepciones de video a las exclusiones Git. Se conserva la atribucion y la licencia CC BY-NC 4.0
-del material; es una demostracion tecnica no comercial, no una
-certificacion de precision ni una grabacion propia de Tennis Lab.
+y el analisis de CalTennis (20 s) y de la toma aerea Pexels 20219055
+(22,8 s), en bloques independientes. Sus cuatro MP4 en `docs/media`
+son las unicas excepciones de video a las exclusiones Git y se muestran
+tambien en una instalacion nueva de la app. Los dos MP4 CalTennis tienen
+ademas una copia en la [release de ejemplos](https://github.com/gabricross/tennis_app/releases/tag/ejemplo-v1);
+los assets del ejemplo antiguo de tenis se han retirado. No se incluye
+ninguna demo de futbol. Se conservan autores, fuentes y licencias:
+CC BY-NC 4.0 para CalTennis y licencia Pexels para Ahmet Kurt.
+Son demostraciones tecnicas, no certificaciones de precision ni
+grabaciones propias. Todo video mostrado en una web publica puede
+descargarse; no se promete proteccion contra copias.

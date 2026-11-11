@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Tennis Lab · Ejemplo de análisis</title>
+  <title>Tennis Lab · Dos ejemplos de análisis</title>
   <link rel="stylesheet" href="assets/video-loader.css">
   <script src="assets/video-loader.js" defer></script>
+  <script src="assets/examples.js" defer></script>
   <style>
     :root{color-scheme:dark}
     body{margin:0;background:#0c171b;color:#ecf3ec;font-family:"Segoe UI",Arial,sans-serif;line-height:1.6}
@@ -13,51 +14,25 @@
     .eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a2b7ba;margin:0 0 8px}
     h1{font-size:32px;margin:0 0 12px}
     .lead{color:#a2b7ba;max-width:70ch}
-    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0}
+    .showcase-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0}
     figure{margin:0}
     figcaption{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#a2b7ba;margin-bottom:6px}
     video{width:100%;border-radius:10px;background:#000}
-    .box{background:#14252b;border:1px solid #2a4147;border-radius:12px;padding:18px 20px;margin-top:16px}
+    .media-example{background:#14252b;border:1px solid #2a4147;border-radius:12px;padding:18px 20px}
     ul{margin:8px 0 0;padding-left:20px;color:#a2b7ba}
     a{color:#d9fa73}
-    @media (max-width:720px){.grid{grid-template-columns:1fr}}
+    @media (max-width:720px){.showcase-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
   <main>
     <p class="eyebrow">Tennis Lab · Demo no comercial</p>
-    <h1>20 segundos de tenis real, con IA.</h1>
+    <h1>Tenis real, dos perspectivas.</h1>
     <p class="lead">Compara el original y su análisis. Esta web no admite subidas: para analizar tus vídeos, <a href="https://github.com/gabricross/tennis_app#readme">instala Tennis Lab en tu equipo</a>.</p>
 
-    <div class="video-pair-controls" data-video-pair="original analysis" role="group" aria-label="Reproducción de original y análisis">
-      <button type="button" data-video-action="play" disabled><span aria-hidden="true">▶</span> Reproducir ambos</button>
-      <button type="button" data-video-action="pause" disabled>Pausar</button>
-      <button type="button" data-video-action="restart" disabled>Volver al inicio</button>
-      <p data-pair-error role="alert" hidden></p>
-    </div>
-    <div class="grid">
-      <figure>
-        <figcaption>Original · 20 segundos</figcaption>
-        <video id="original" hidden playsinline preload="none" aria-label="Fragmento original de CalTennis de 20 segundos" data-video-src="media/caltennis_original_20s.mp4"></video>
-      </figure>
-      <figure>
-        <figcaption>Análisis · 20 segundos</figcaption>
-        <video id="analysis" hidden playsinline preload="none" aria-label="Análisis experimental del mismo fragmento de 20 segundos" data-video-src="media/caltennis_analisis_20s.mp4"></video>
-      </figure>
-    </div>
-    <p class="lead">Espera a que ambos vídeos terminen de cargar y pulsa «Reproducir ambos».</p>
-    <noscript><p>Activa JavaScript o abre el <a href="media/caltennis_original_20s.mp4">original</a> y el <a href="media/caltennis_analisis_20s.mp4">análisis</a>.</p></noscript>
-
-    <div class="box">
-      <p>Vídeo: <a href="https://huggingface.co/datasets/demalenk/caltennis">CalTennis (2026)</a> · Ilona Demler, Xinran Xie, Blake Werner, Anna Szczuka y Pietro Perona · <a href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a> (uso no comercial). Análisis: Tennis Lab, sin respaldo de los autores.</p>
-      <p><a href="https://huggingface.co/datasets/demalenk/caltennis/blob/4af17dd4d398aad4116a35b5a74de4388658d356/10_02_2025_08_00_court5/10_02_2025_08_14_59_000_court5_N_2_08_30_22_535.mp4">Original</a> recortado a 20 s y 30 fps, sin audio; overlays añadidos al análisis.</p>
-      <ul>
-        <li>iPhone fijo desde el fondo, no desde la grada. YOLO multiescala anterior a las últimas mejoras; unos 11 min en CPU.</li>
-        <li>Pelota experimental: 47,8 % de cobertura (no precisión), con pérdidas y posibles confusiones.</li>
-        <li>Calibración y seguimiento parciales: movimiento de jugadores estimado, no recorridos completos ni medidas certificadas.</li>
-        <li>Sin tiempo real, velocidad de pelota, reconstrucción 3D ni decisiones de dentro/fuera.</li>
-      </ul>
-    </div>
+    <p class="lead">Cada ejemplo tiene sus propios controles. Espera a la carga completa y pulsa «Reproducir ambos».</p>
+    <div id="examples" data-example-manifest="examples.json"></div>
+    <noscript><p>Activa JavaScript o abre los vídeos: CalTennis (<a href="media/caltennis_original_20s.mp4">original</a> / <a href="media/caltennis_analisis_20s.mp4">análisis</a>) y toma aérea (<a href="media/pexels_20219055_original.mp4">original</a> / <a href="media/pexels_20219055_analisis.mp4">análisis</a>). Créditos y condiciones en <a href="examples.json">el registro de ejemplos</a>.</p></noscript>
   </main>
 </body>
 </html>

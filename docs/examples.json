@@ -1,0 +1,34 @@
+[
+  {
+    "title": "01 · iPhone desde el fondo · 20 s",
+    "original": "media/caltennis_original_20s.mp4",
+    "analysis": "media/caltennis_analisis_20s.mp4",
+    "credit": "CalTennis (2026) · Ilona Demler, Xinran Xie, Blake Werner, Anna Szczuka y Pietro Perona. Análisis: Tennis Lab, sin respaldo de los autores.",
+    "source_url": "https://huggingface.co/datasets/demalenk/caltennis/blob/4af17dd4d398aad4116a35b5a74de4388658d356/10_02_2025_08_00_court5/10_02_2025_08_14_59_000_court5_N_2_08_30_22_535.mp4",
+    "license": "CC BY-NC 4.0 · uso no comercial",
+    "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+    "modifications": "Recorte a 20 s y 30 fps, sin audio; overlays añadidos al análisis.",
+    "notes": [
+      "Cámara fija desde el fondo, no desde la grada. YOLO multiescala anterior a las últimas mejoras; unos 11 min en CPU.",
+      "Pelota experimental: 47,8 % de cobertura (no precisión), con pérdidas y posibles confusiones.",
+      "Calibración y seguimiento parciales: movimiento de jugadores estimado, no recorridos completos ni medidas certificadas.",
+      "Sin tiempo real, velocidad de pelota, 3D ni decisiones de dentro/fuera."
+    ]
+  },
+  {
+    "title": "02 · Toma aérea oblicua · 22,8 s",
+    "original": "media/pexels_20219055_original.mp4",
+    "analysis": "media/pexels_20219055_analisis.mp4",
+    "credit": "Ahmet Kurt · Pexels, vídeo 20219055. Análisis: Tennis Lab, sin respaldo del autor.",
+    "source_url": "https://www.pexels.com/video/an-aerial-view-of-a-tennis-court-with-two-people-playing-20219055/",
+    "license": "Licencia Pexels",
+    "license_url": "https://www.pexels.com/license/",
+    "modifications": "Fragmento normalizado a 720p y 30 fps, sin audio; overlays añadidos al análisis.",
+    "notes": [
+      "Vista aérea de la pista completa, no desde la grada. YOLO multiescala; unos 24 min en CPU.",
+      "Pista: registro válido en el 100 % de las muestras. Jugador azul: 100 % de cobertura; blanco: 69 %. Cobertura no es precisión.",
+      "Pelota experimental: solo 49 de 685 fotogramas (7,2 %). Hay grandes pérdidas; no es seguimiento completo.",
+      "Movimiento de jugadores estimado. Sin tiempo real, velocidad de pelota, 3D ni decisiones de dentro/fuera."
+    ]
+  }
+]
