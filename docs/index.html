@@ -21,6 +21,12 @@
     .media-example{background:#14252b;border:1px solid #2a4147;border-radius:12px;padding:18px 20px}
     ul{margin:8px 0 0;padding-left:20px;color:#a2b7ba}
     a{color:#d9fa73}
+    .download-app{background:#14252b;border:1px solid #2a4147;border-radius:12px;padding:24px;margin-top:32px}
+    .download-app h2{margin:0;font-size:24px}
+    .download-button{display:inline-block;background:#d9fa73;color:#0c171b;padding:12px 20px;border-radius:8px;font-weight:600;text-decoration:none}
+    .download-button:hover{background:#ecffa6}
+    a:focus-visible{outline:3px solid #72e1d1;outline-offset:4px}
+    .requirements{font-size:14px;color:#a2b7ba;margin-bottom:0}
     @media (max-width:720px){.showcase-grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -28,11 +34,17 @@
   <main>
     <p class="eyebrow">Tennis Lab · Demo no comercial</p>
     <h1>Tenis real, dos perspectivas.</h1>
-    <p class="lead">Compara el original y su análisis. Esta web no admite subidas: para analizar tus vídeos, <a href="https://github.com/gabricross/tennis_app#readme">instala Tennis Lab en tu equipo</a>.</p>
+    <p class="lead">Aquí puedes ver los ejemplos y comparar el original con su análisis. Para subir tus propios vídeos, <a href="#descargar-app">descarga la app para tu ordenador</a>.</p>
 
     <p class="lead">Cada ejemplo tiene sus propios controles. Espera a la carga completa y pulsa «Reproducir ambos».</p>
     <div id="examples" data-example-manifest="examples.json"></div>
     <noscript><p>Activa JavaScript o abre los vídeos: CalTennis (<a href="media/caltennis_original_20s.mp4">original</a> / <a href="media/caltennis_analisis_20s.mp4">análisis</a>) y toma aérea (<a href="media/pexels_20219055_original.mp4">original</a> / <a href="media/pexels_20219055_analisis.mp4">análisis</a>). Créditos y condiciones en <a href="examples.json">el registro de ejemplos</a>.</p></noscript>
+    <section class="download-app" id="descargar-app" aria-labelledby="download-title">
+      <h2 id="download-title">Analiza tus propios vídeos.</h2>
+      <p class="lead">Descarga e instala Tennis Lab en tu ordenador para subir vídeos y generar tu propio análisis. Esta web solo muestra ejemplos; la app procesa los vídeos en tu equipo.</p>
+      <a class="download-button" href="https://github.com/gabricross/tennis_app#instalar-desde-github-en-windows">Descargar app en GitHub</a>
+      <p class="requirements">En GitHub: Code → Download ZIP. Extrae el ZIP y sigue la instalación. Requiere Windows 10/11 y Python 3.14 de 64 bits.</p>
+    </section>
   </main>
 </body>
 </html>

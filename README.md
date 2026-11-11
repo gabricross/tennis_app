@@ -2,7 +2,9 @@
 
 Aplicacion web **local y funcional** para cargar clips propios de tenis, revisar la pista, ejecutar inferencia, explorar los resultados y descargarlos. Desarrollada para Gabriele Ruggeri.
 
-No es una pagina con un resultado fijo. Cada analisis procesa el archivo cargado y el intervalo seleccionado.
+La [web publica](https://gabricross.github.io/tennis_app/) permite ver los
+ejemplos. Para subir videos propios, descarga e instala la app en tu
+ordenador. Cada analisis local procesa el archivo cargado y el intervalo seleccionado.
 
 ## Instalar desde GitHub en Windows
 
@@ -16,8 +18,9 @@ Set-Location .\tennis_app
 .\Preparar_Tennis_Lab.ps1
 ```
 
-Tambien puedes descargar el ZIP desde GitHub, extraerlo y ejecutar la
-preparacion desde esa carpeta. Incluye solo los dos ejemplos de tenis
+Tambien puedes [descargar el ZIP desde GitHub](https://github.com/gabricross/tennis_app/archive/refs/heads/main.zip),
+extraerlo y ejecutar `.\Preparar_Tennis_Lab.ps1` desde la carpeta extraida.
+Incluye solo los dos ejemplos de tenis
 visibles en la aplicacion, cada uno con su original y analisis.
 
 Para una instalacion mas ligera, sin PyTorch ni los modelos de pista/pelota:
